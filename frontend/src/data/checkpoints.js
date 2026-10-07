@@ -1,0 +1,58 @@
+const checkpoints = [
+  {
+    id: "library",
+    name: "Central Library",
+    latitude: 22.6819,
+    longitude: 75.8796,
+    radius: 30,
+    points: 100,
+    clue: "Find the place where knowledge sleeps.",
+  },
+  {
+    id: "main-building",
+    name: "Main Building",
+    latitude: 22.6825,
+    longitude: 75.8805,
+    radius: 30,
+    points: 150,
+    clue: "The heart of the campus awaits.",
+  },
+  {
+    id: "sports",
+    name: "Sports Complex",
+    latitude: 22.683,
+    longitude: 75.8815,
+    radius: 30,
+    points: 200,
+    clue: "Where champions train.",
+  },
+  {
+    id: "engineering",
+    name: "Engineering Block",
+    latitude: 22.6812,
+    longitude: 75.881,
+    radius: 30,
+    points: 150,
+    clue: "Machines, circuits and ideas come together here.",
+  },
+  {
+    id: "auditorium",
+    name: "Auditorium",
+    latitude: 22.6805,
+    longitude: 75.8795,
+    radius: 30,
+    points: 250,
+    clue: "Where the campus gathers.",
+  },
+  {
+    id: "Home",
+    name: "Home",
+    latitude: 22.68144549530646,
+    longitude: 75.86794313227657,
+    radius: 30,
+    points: 250,
+    clue: "Where the campus gathers.",
+  },
+];
+
+export default checkpoints;

@@ -1,0 +1,328 @@
+/* =========================================================
+   MENU OVERLAY
+   ========================================================= */
+
+.side-menu-overlay {
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 2999;
+
+    background: rgba(0, 0, 0, 0.58);
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    transition:
+        opacity 180ms ease;
+}
+
+.side-menu-overlay.open {
+    opacity: 1;
+
+    pointer-events: auto;
+}
+
+/* =========================================================
+   SIDE MENU
+   ========================================================= */
+
+.side-menu {
+    position: fixed;
+
+    top: 0;
+    right: 0;
+    bottom: 0;
+
+    z-index: 3000;
+
+    width: min(330px, 88vw);
+
+    display: flex;
+    flex-direction: column;
+
+    background: #202326;
+
+    border-left: 3px solid #111315;
+
+    color: white;
+
+    transform: translateX(100%);
+
+    transition:
+        transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+
+    box-shadow:
+        -6px 0 0 rgba(0, 0, 0, 0.28);
+
+    /*
+   * Account for phone camera/notch area.
+   */
+    padding-top: env(safe-area-inset-top);
+}
+
+.side-menu.open {
+    transform: translateX(0);
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.side-menu-header {
+    min-height: 68px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 0 14px;
+
+    border-bottom: 3px solid #111315;
+}
+
+.side-menu-title {
+    font-size: 14px;
+    font-weight: 900;
+
+    letter-spacing: 1px;
+}
+
+.side-menu-subtitle {
+    margin-top: 3px;
+
+    color: #858c93;
+
+    font-size: 7px;
+    font-weight: 800;
+
+    letter-spacing: 1.2px;
+}
+
+.side-menu-close {
+    width: 36px;
+    height: 36px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+
+    border: 2px solid #111315;
+
+    background: #2c3034;
+
+    color: white;
+
+    cursor: pointer;
+
+    -webkit-tap-highlight-color: transparent;
+}
+
+.side-menu-close:active {
+    background: #383d42;
+}
+
+/* =========================================================
+   CONTENT
+   ========================================================= */
+
+.side-menu-content {
+    flex: 1;
+
+    min-height: 0;
+
+    overflow-y: auto;
+
+    padding: 14px;
+
+    overscroll-behavior: contain;
+}
+
+.side-menu-section-label {
+    margin: 3px 4px 8px;
+
+    color: #737b83;
+
+    font-size: 8px;
+    font-weight: 900;
+
+    letter-spacing: 1.5px;
+}
+
+/* =========================================================
+   MENU ITEMS
+   ========================================================= */
+
+.side-menu-item {
+    width: 100%;
+    min-height: 48px;
+
+    display: flex;
+    align-items: center;
+
+    gap: 12px;
+
+    margin-bottom: 4px;
+
+    padding: 0 11px;
+
+    border: 2px solid transparent;
+
+    background: transparent;
+
+    color: #e5e7eb;
+
+    font-size: 12px;
+    font-weight: 800;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    -webkit-tap-highlight-color: transparent;
+}
+
+.side-menu-item:hover {
+    background: #2c3034;
+
+    border-color: #111315;
+
+    color: #f5c542;
+}
+
+.side-menu-item:active {
+    background: #353a3f;
+}
+
+.side-menu-item svg {
+    flex-shrink: 0;
+
+    color: #8d959d;
+}
+
+.side-menu-item:hover svg {
+    color: #f5c542;
+}
+
+/* =========================================================
+   BADGE
+   ========================================================= */
+
+.side-menu-badge {
+    margin-left: auto;
+
+    padding: 3px 6px;
+
+    background: #173a25;
+
+    border: 1px solid #3c8f55;
+
+    color: #6ee28d;
+
+    font-size: 7px;
+    font-weight: 900;
+}
+
+/* =========================================================
+   DIVIDER
+   ========================================================= */
+
+.side-menu-divider {
+    height: 2px;
+
+    margin: 17px 0;
+
+    background: #111315;
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.side-menu-footer {
+    flex-shrink: 0;
+
+    padding: 13px 14px;
+
+    padding-bottom:
+        calc(13px + env(safe-area-inset-bottom));
+
+    border-top: 3px solid #111315;
+}
+
+.side-menu-logout {
+    width: 100%;
+    height: 42px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+
+    border: 2px solid #111315;
+
+    background: #2c3034;
+
+    color: #ef7777;
+
+    font-size: 10px;
+    font-weight: 900;
+
+    letter-spacing: 1px;
+
+    cursor: pointer;
+
+    -webkit-tap-highlight-color: transparent;
+}
+
+.side-menu-logout:hover {
+    background: #392a2a;
+}
+
+.side-menu-logout:active {
+    background: #422d2d;
+}
+
+.side-menu-version {
+    margin-top: 9px;
+
+    color: #626970;
+
+    text-align: center;
+
+    font-size: 7px;
+    font-weight: 700;
+
+    letter-spacing: 0.8px;
+}
+
+/* =========================================================
+   SMALL PHONES
+   ========================================================= */
+
+@media (max-width: 360px) {
+    .side-menu {
+        width: 90vw;
+    }
+
+    .side-menu-item {
+        min-height: 46px;
+
+        font-size: 11px;
+    }
+}
+
+/* =========================================================
+   TABLET / DESKTOP
+   ========================================================= */
+
+@media (min-width: 768px) {
+    .side-menu {
+        width: 350px;
+    }
+}
