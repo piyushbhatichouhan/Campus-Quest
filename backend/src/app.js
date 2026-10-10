@@ -14,7 +14,6 @@ app.set("trust proxy", 1);
 app.use(helmet());
 
 // Restrict CORS origins to trusted origins
-const cors = require("cors");
 
 app.use(
   cors({
