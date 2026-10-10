@@ -119,9 +119,10 @@ router.post(
   }),
 );
 
-router.get("/api/config", (req, res) => {
+router.get("/config", (req, res) => {
+  res.set("Cache-Control", "no-store");
   res.json({
-    apiBaseUrl: process.env.PUBLIC_API_BASE_URL || "",
+    apiBaseUrl: process.env.PUBLIC_API_BASE_URL,
   });
 });
 

@@ -1,15 +1,36 @@
 import { auth } from "../config/firebase";
 
 // Support both VITE_API_BASE_URL and VITE_API_URL with automatic /api normalization
-const rawUrl =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:5000/api";
+const CONFIG_URL = "https://campus-quest-cqa8.onrender.com/api/config";
 
-const trimmedUrl = rawUrl.replace(/\/+$/, "");
-const API_BASE_URL = trimmedUrl.endsWith("/api")
-  ? trimmedUrl
-  : `${trimmedUrl}/api`;
+let apiBaseUrlPromise;
+
+async function getApiBaseUrl() {
+  if (!apiBaseUrlPromise) {
+    apiBaseUrlPromise = fetch(CONFIG_URL)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load API configuration.");
+        }
+
+        const config = await response.json();
+
+        if (!config.apiBaseUrl) {
+          throw new Error("Backend API URL is missing.");
+        }
+
+        const trimmedUrl = config.apiBaseUrl.replace(/\/+$/, "");
+
+        return trimmedUrl.endsWith("/api") ? trimmedUrl : `${trimmedUrl}/api`;
+      })
+      .catch((error) => {
+        apiBaseUrlPromise = null;
+        throw error;
+      });
+  }
+
+  return apiBaseUrlPromise;
+}
 
 async function request(endpoint, options = {}, requiresAuth = true) {
   let token = null;
@@ -34,7 +55,9 @@ async function request(endpoint, options = {}, requiresAuth = true) {
   let response;
 
   try {
-    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const apiBaseUrl = await getApiBaseUrl();
+
+    response = await fetch(`${apiBaseUrl}${endpoint}`, {
       ...options,
       headers,
     });
