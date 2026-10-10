@@ -35,8 +35,8 @@ module.exports = [
     id: "library",
     order: 2,
     name: "Library",
-    latitude: 22.681316711314793,
-    longitude: 75.8809725199231,
+    latitude: 22.681478702822382,
+    longitude: 75.86794773833824,
     radius: 30,
     points: 100,
 

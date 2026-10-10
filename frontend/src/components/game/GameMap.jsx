@@ -75,7 +75,7 @@ function GameMap({
         {/* Checkpoint engine debug information         */}
         {/* ------------------------------------------- */}
 
-        <div className="checkpoint-debug">
+        {/* <div className="checkpoint-debug">
           <strong>CHECKPOINTS</strong>
 
           {checkpointStates.map((checkpoint) => (
@@ -104,7 +104,7 @@ function GameMap({
               </span>
             </div>
           ))}
-        </div>
+        </div> */}
       </div>
 
       {/* --------------------------------------------- */}

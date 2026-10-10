@@ -9,7 +9,9 @@ function QuestsView({
   gameCompleted = false,
   onSwitchToMap,
 }) {
-  const completedCount = checkpoints.filter((c) => c.status === "COMPLETED").length;
+  const completedCount = checkpoints.filter(
+    (c) => c.status === "COMPLETED",
+  ).length;
   const totalCount = checkpoints.length || 5;
   const progressPercent = Math.round((completedCount / totalCount) * 100);
 
@@ -43,8 +45,15 @@ function QuestsView({
               <Trophy size={14} /> QUEST COMPLETE
             </div>
             <h3 className="active-quest-name">Campus Legend!</h3>
-            <p style={{ margin: "6px 0 14px", fontSize: "13px", color: "#6ee7a0" }}>
-              You have discovered all campus checkpoints and conquered every riddle.
+            <p
+              style={{
+                margin: "6px 0 14px",
+                fontSize: "13px",
+                color: "#6ee7a0",
+              }}
+            >
+              You have discovered all campus checkpoints and conquered every
+              riddle.
             </p>
             <button
               type="button"
@@ -68,13 +77,25 @@ function QuestsView({
             <h3 className="active-quest-name">{currentCheckpoint.name}</h3>
 
             {currentCheckpoint.distance != null && (
-              <p style={{ margin: "0 0 10px", fontSize: "12px", color: "#f5c542" }}>
+              <p
+                style={{
+                  margin: "0 0 10px",
+                  fontSize: "12px",
+                  color: "#f5c542",
+                }}
+              >
                 📍 Approx. {Math.round(currentCheckpoint.distance)} meters away
               </p>
             )}
 
             {currentCheckpoint.discoveryText && (
-              <p style={{ margin: "4px 0 12px", fontSize: "12px", color: "#bcb4a3" }}>
+              <p
+                style={{
+                  margin: "4px 0 12px",
+                  fontSize: "12px",
+                  color: "#bcb4a3",
+                }}
+              >
                 {currentCheckpoint.discoveryText}
               </p>
             )}
@@ -92,7 +113,10 @@ function QuestsView({
               type="button"
               className="active-quest-action-btn"
               onClick={() => {
-                if (currentCheckpoint.status === "DISCOVERED" || currentCheckpoint.status === "CHALLENGE") {
+                if (
+                  currentCheckpoint.status === "DISCOVERED" ||
+                  currentCheckpoint.status === "CHALLENGE"
+                ) {
                   onSelectCheckpoint(currentCheckpoint.id);
                 } else {
                   onSwitchToMap();
@@ -109,7 +133,7 @@ function QuestsView({
         ) : null}
 
         {/* Checkpoint Sequence List */}
-        <h3 className="timeline-title">CHECKPOINT PROGRESSION</h3>
+        {/* <h3 className="timeline-title">CHECKPOINT PROGRESSION</h3>
 
         <div className="checkpoint-list">
           {checkpoints.map((cp, idx) => {
@@ -164,7 +188,7 @@ function QuestsView({
               </div>
             );
           })}
-        </div>
+        </div> */}
       </div>
     </div>
   );
