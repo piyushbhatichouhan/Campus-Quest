@@ -14,24 +14,15 @@ app.set("trust proxy", 1);
 app.use(helmet());
 
 // Restrict CORS origins to trusted origins
-const allowedOrigins = (
-  process.env.ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:3000"
-)
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
+const cors = require("cors");
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, same-origin, Render health-checks) or in allowed list
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS policy violation: Origin not allowed."));
-      }
-    },
-    methods: ["GET", "POST", "OPTIONS"],
+    origin: [
+      "https://campusquest-877f2.web.app",
+      "https://campusquest-877f2.firebaseapp.com",
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
