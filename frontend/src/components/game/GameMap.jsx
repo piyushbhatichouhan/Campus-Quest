@@ -172,56 +172,62 @@ function GameMap({
         {/* CHECKPOINTS                                 */}
         {/* ------------------------------------------- */}
 
-        {checkpointStates.map((checkpoint) => (
-          <Fragment key={checkpoint.id}>
-            {/* --------------------------------------- */}
-            {/* Checkpoint geofence circle              */}
-            {/* --------------------------------------- */}
+        {checkpointStates
+          .filter((checkpoint) => checkpoint.status !== "HIDDEN")
+          .map((checkpoint) => (
+            <Fragment key={checkpoint.id}>
+              {/* --------------------------------------- */}
+              {/* Checkpoint geofence circle              */}
+              {/* --------------------------------------- */}
 
-            <Circle
-              center={[checkpoint.latitude, checkpoint.longitude]}
-              radius={checkpoint.radius}
-              pathOptions={{
-                color:
-                  checkpoint.status === "COMPLETED"
-                    ? "#22c55e"
-                    : checkpoint.status === "CLAIMED"
-                      ? "#a855f7"
-                      : checkpoint.status === "AVAILABLE"
-                        ? "#f5c542"
-                        : "#6b7280",
+              <Circle
+                center={[checkpoint.latitude, checkpoint.longitude]}
+                radius={checkpoint.radius}
+                pathOptions={{
+                  color:
+                    checkpoint.status === "COMPLETED"
+                      ? "#22c55e"
+                      : checkpoint.status === "CLAIMED"
+                        ? "#a855f7"
+                        : checkpoint.status === "AVAILABLE"
+                          ? "#f5c542"
+                          : "#6b7280",
 
-                fillColor:
-                  checkpoint.status === "COMPLETED"
-                    ? "#22c55e"
-                    : checkpoint.status === "CLAIMED"
-                      ? "#a855f7"
-                      : checkpoint.status === "AVAILABLE"
-                        ? "#f5c542"
-                        : "#6b7280",
+                  fillColor:
+                    checkpoint.status === "COMPLETED"
+                      ? "#22c55e"
+                      : checkpoint.status === "CLAIMED"
+                        ? "#a855f7"
+                        : checkpoint.status === "AVAILABLE"
+                          ? "#f5c542"
+                          : "#6b7280",
 
-                fillOpacity: 0.15,
-                weight: 2,
-              }}
-            />
+                  fillOpacity: 0.15,
+                  weight: 2,
+                }}
+              />
 
-            {/* --------------------------------------- */}
-            {/* Checkpoint marker                       */}
-            {/* --------------------------------------- */}
+              {/* --------------------------------------- */}
+              {/* Checkpoint marker                       */}
+              {/* --------------------------------------- */}
 
-            <Marker
-              position={[checkpoint.latitude, checkpoint.longitude]}
-              icon={playerIcon}
-              eventHandlers={{
-                click: () => {
-                  if (checkpoint.status === "AVAILABLE") {
-                    onCheckpointSelect(checkpoint.id);
-                  }
-                },
-              }}
-            />
-          </Fragment>
-        ))}
+              <Marker
+                position={[checkpoint.latitude, checkpoint.longitude]}
+                icon={playerIcon}
+                eventHandlers={{
+                  click: () => {
+                    if (
+                      checkpoint.status === "REVEALED" ||
+                      checkpoint.status === "DISCOVERED" ||
+                      checkpoint.status === "CHALLENGE"
+                    ) {
+                      onCheckpointSelect(checkpoint.id);
+                    }
+                  },
+                }}
+              />
+            </Fragment>
+          ))}
       </MapContainer>
     </div>
   );

@@ -1,1 +1,9 @@
 /architecture.md
+backend/.env
+backend/node_modules
+frontend/node_modules
+backend/service-account*.json
+backend/*-service-account*.json
+backend/firebase-admin-key.json
+frontend/.env
+backend/src/tests

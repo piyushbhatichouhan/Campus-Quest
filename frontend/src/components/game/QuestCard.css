@@ -501,3 +501,90 @@
         font-size: 14px;
     }
 }
+
+/* =========================================================
+   CHALLENGE UI
+   ========================================================= */
+
+.quest-card-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 900;
+}
+
+.quest-card-message {
+    margin-top: 12px;
+}
+
+.quest-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.quest-option {
+    width: 100%;
+    padding: 11px 12px;
+
+    border: 2px solid #111315;
+    background: #30343a;
+    color: white;
+
+    text-align: left;
+    font-size: 13px;
+    font-weight: 800;
+
+    cursor: pointer;
+
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+}
+
+.quest-option:hover {
+    background: #3b4148;
+}
+
+.quest-option.selected {
+    background: #f5c542;
+    color: #111315;
+}
+
+.quest-answer-input {
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px;
+
+    border: 2px solid #111315;
+    outline: none;
+
+    background: #181a1d;
+    color: white;
+
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.quest-answer-input:focus {
+    border-color: #f5c542;
+}
+
+.quest-feedback {
+    margin-top: 10px;
+
+    padding: 9px 11px;
+
+    border: 2px solid #111315;
+
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.quest-feedback-error {
+    background: #451b1b;
+    color: #ff8a8a;
+}
+
+.quest-feedback-success {
+    background: #173b25;
+    color: #6ee7a0;
+}

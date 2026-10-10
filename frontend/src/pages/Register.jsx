@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { getFriendlyErrorMessage } from "../utils/authErrors";
 import "./Auth.css";
 
 function Register() {
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const [form, setForm] = useState({
     username: "",
@@ -14,9 +17,12 @@ function Register() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    setErrorMsg("");
 
     setForm((prev) => ({
       ...prev,
@@ -24,19 +30,35 @@ function Register() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
 
-    if (form.password !== form.confirmPassword) {
-      alert("Passwords do not match.");
+    if (!form.username.trim()) {
+      setErrorMsg("Please choose a player name.");
       return;
     }
 
-    // Temporary registration.
-    // Firebase Authentication will replace this later.
-    console.log("Register:", form);
+    if (form.password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters long.");
+      return;
+    }
 
-    navigate("/game");
+    if (form.password !== form.confirmPassword) {
+      setErrorMsg("Passwords do not match.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      await register(form.email.trim(), form.password, form.username.trim());
+      navigate("/game");
+    } catch (err) {
+      setErrorMsg(getFriendlyErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -72,6 +94,12 @@ function Register() {
             Create your character and begin your quest.
           </p>
 
+          {errorMsg && (
+            <div className="auth-error-banner" role="alert">
+              {errorMsg}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-field">
               <label htmlFor="username">PLAYER NAME</label>
@@ -84,9 +112,10 @@ function Register() {
                 value={form.username}
                 onChange={handleChange}
                 required
-                minLength={3}
+                minLength={2}
                 maxLength={24}
                 autoComplete="username"
+                disabled={submitting}
               />
 
               <span className="field-hint">
@@ -106,6 +135,7 @@ function Register() {
                 onChange={handleChange}
                 required
                 autoComplete="email"
+                disabled={submitting}
               />
             </div>
 
@@ -117,12 +147,13 @@ function Register() {
                   id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Create a password"
+                  placeholder="Create a password (min 6 chars)"
                   value={form.password}
                   onChange={handleChange}
                   required
-                  minLength={8}
+                  minLength={6}
                   autoComplete="new-password"
+                  disabled={submitting}
                 />
 
                 <button
@@ -148,6 +179,7 @@ function Register() {
                   onChange={handleChange}
                   required
                   autoComplete="new-password"
+                  disabled={submitting}
                 />
 
                 <button
@@ -160,16 +192,12 @@ function Register() {
               </div>
             </div>
 
-            <label className="terms-option">
-              <input type="checkbox" required />
-
-              <span className="pixel-checkbox" />
-
-              <span>I agree to the game rules and event guidelines.</span>
-            </label>
-
-            <button type="submit" className="pixel-button primary">
-              <span>START ADVENTURE</span>
+            <button
+              type="submit"
+              className="pixel-button primary"
+              disabled={submitting}
+            >
+              <span>{submitting ? "CREATING..." : "START ADVENTURE"}</span>
               <span className="button-arrow">▶</span>
             </button>
           </form>

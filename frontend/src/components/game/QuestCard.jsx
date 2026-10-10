@@ -1,192 +1,272 @@
-import { MapPin, X, Sparkles, CheckCircle2, LockKeyhole } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MapPin, LockKeyhole, CheckCircle2, Trophy, X } from "lucide-react";
+
 import "./QuestCard.css";
-function QuestCard({
-  checkpoint,
-  availableCheckpoint,
-  onClaim,
-  onComplete,
-  onClose,
-  onSelectCheckpoint,
-}) {
-  /*
-   * If a checkpoint is selected, show that quest.
-   *
-   * Otherwise, if there is an available checkpoint,
-   * show a discovery card for it.
-   *
-   * Otherwise show the exploration state.
-   */
 
-  if (checkpoint) {
-    return (
-      <div className="quest-card">
-        <div className="quest-card-header">
-          <div className="quest-card-type">
-            {checkpoint.status === "COMPLETED"
-              ? "QUEST COMPLETE"
-              : checkpoint.status === "CLAIMED"
-                ? "ACTIVE QUEST"
-                : "QUEST AVAILABLE"}
-          </div>
+function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
+  const [answer, setAnswer] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-          <button
-            className="quest-card-close"
-            onClick={onClose}
-            aria-label="Close quest"
-          >
-            <X size={17} />
-          </button>
-        </div>
+  useEffect(() => {
+    setAnswer("");
+    setFeedback(null);
+    setSubmitting(false);
+  }, [checkpoint?.id]);
 
-        <div className="quest-card-title-row">
-          <div className="quest-card-icon">
-            {checkpoint.status === "COMPLETED" ? (
-              <CheckCircle2 size={22} />
-            ) : (
-              <MapPin size={22} />
-            )}
-          </div>
-
-          <div>
-            <h2>{checkpoint.name}</h2>
-
-            {checkpoint.distance !== null && (
-              <div className="quest-card-distance">
-                {checkpoint.distance.toFixed(1)}m away
-              </div>
-            )}
-          </div>
-        </div>
-
-        {checkpoint.status === "AVAILABLE" && (
-          <>
-            <div className="quest-card-message">
-              <Sparkles size={16} />
-
-              <p>
-                You have entered the checkpoint zone. Claim this location to
-                discover your quest.
-              </p>
-            </div>
-
-            <QuestReward points={checkpoint.points} />
-
-            <button
-              className="quest-card-action"
-              onClick={() => onClaim(checkpoint.id)}
-            >
-              CLAIM QUEST
-            </button>
-          </>
-        )}
-
-        {checkpoint.status === "CLAIMED" && (
-          <>
-            <div className="quest-clue-box">
-              <div className="quest-clue-label">YOUR CLUE</div>
-
-              <div className="quest-clue">"{checkpoint.clue}"</div>
-            </div>
-
-            <QuestReward points={checkpoint.points} />
-
-            <button
-              className="quest-card-action"
-              onClick={() => onComplete(checkpoint.id)}
-            >
-              SOLVE QUEST
-            </button>
-          </>
-        )}
-
-        {checkpoint.status === "COMPLETED" && (
-          <>
-            <div className="quest-completed-box">
-              <CheckCircle2 size={20} />
-
-              <div>
-                <strong>QUEST COMPLETED</strong>
-
-                <span>Location successfully discovered.</span>
-              </div>
-            </div>
-
-            <QuestReward points={checkpoint.points} />
-          </>
-        )}
-      </div>
-    );
+  if (!checkpoint) {
+    return null;
   }
 
-  if (availableCheckpoint) {
-    return (
-      <div className="quest-card quest-card-discovery">
-        <div className="quest-card-header">
-          <div className="quest-card-type">NEW QUEST NEARBY</div>
+  const { status, name, distance, points, discoveryText, challenge, nextClue } =
+    checkpoint;
 
-          <Sparkles size={18} className="quest-discovery-icon" />
-        </div>
+  async function handleClaim() {
+    if (submitting) return;
 
-        <div className="quest-card-title-row">
-          <div className="quest-card-icon available">
-            <MapPin size={22} />
-          </div>
+    setSubmitting(true);
+    setFeedback(null);
 
-          <div>
-            <h2>{availableCheckpoint.name}</h2>
+    try {
+      const success = await onClaim(checkpoint.id);
 
-            <div className="quest-card-distance">Checkpoint discovered</div>
-          </div>
-        </div>
+      if (!success) {
+        setFeedback({
+          type: "error",
+          message: "You must be inside the checkpoint area to claim it.",
+        });
+        return;
+      }
 
-        <p className="quest-discovery-text">
-          You've entered a quest zone. Open the checkpoint to discover what
-          awaits you.
-        </p>
+      setFeedback(null);
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message: error.message || "Could not claim checkpoint. Try again.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-        <button
-          className="quest-card-action"
-          onClick={() => onSelectCheckpoint(availableCheckpoint.id)}
-        >
-          VIEW QUEST
-        </button>
-      </div>
-    );
+  async function handleSubmit() {
+    if (!answer.trim()) {
+      setFeedback({
+        type: "error",
+        message: "Enter an answer first.",
+      });
+      return;
+    }
+
+    if (submitting) return;
+
+    setSubmitting(true);
+    setFeedback(null);
+
+    try {
+      const result = await onSubmitChallenge(checkpoint.id, answer);
+
+      if (!result.success) {
+        setFeedback({
+          type: "error",
+          message: result.reason || "Incorrect answer. Try again.",
+        });
+        return;
+      }
+
+      setFeedback({
+        type: "success",
+        message: `Checkpoint complete! +${result.points} XP`,
+      });
+
+      setAnswer("");
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message: error.message || "Could not submit answer. Try again.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleOptionSelect(option) {
+    if (submitting) return;
+    setAnswer(option);
+    setFeedback(null);
   }
 
   return (
-    <div className="quest-card quest-card-empty">
+    <section className="quest-card">
       <div className="quest-card-header">
-        <div className="quest-card-type">CURRENT OBJECTIVE</div>
+        <div className="quest-card-type">
+          <MapPin size={14} />
+          <span>
+            {status === "CHALLENGE"
+              ? "CHALLENGE"
+              : status === "DISCOVERED"
+                ? "CHECKPOINT DISCOVERED"
+                : status === "COMPLETED"
+                  ? "COMPLETED"
+                  : "CURRENT OBJECTIVE"}
+          </span>
+        </div>
 
-        <LockKeyhole size={17} />
+        <button
+          className="quest-card-close"
+          onClick={onClose}
+          aria-label="Close quest"
+          type="button"
+        >
+          <X size={18} />
+        </button>
       </div>
 
-      <div className="quest-empty-content">
-        <div className="quest-empty-icon">
-          <MapPin size={25} />
+      <div className="quest-card-title-row">
+        <div className="quest-card-icon">
+          {status === "COMPLETED" ? (
+            <CheckCircle2 size={24} />
+          ) : (
+            <MapPin size={24} />
+          )}
         </div>
 
         <div>
-          <h2>EXPLORE THE CAMPUS</h2>
+          <h2 className="quest-card-title">{name}</h2>
 
-          <p>
-            Move around campus and enter a marked checkpoint zone to discover
-            your next quest.
-          </p>
+          {distance != null && (
+            <div className="quest-card-distance">
+              {Math.round(distance)} m away
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  );
-}
 
-function QuestReward({ points }) {
-  return (
-    <div className="quest-reward-row">
-      <span>REWARD</span>
+      {status === "REVEALED" && (
+        <div className="quest-card-discovery">
+          <div className="quest-discovery-icon">
+            <LockKeyhole size={20} />
+          </div>
 
-      <strong>+{points} XP</strong>
-    </div>
+          <div className="quest-discovery-text">
+            <strong>Find this checkpoint</strong>
+            <span>
+              Travel to the marked location and enter its discovery zone.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {status === "DISCOVERED" && (
+        <>
+          <div className="quest-card-message">{discoveryText}</div>
+
+          <div className="quest-card-reward-row">
+            <span>REWARD</span>
+            <strong>
+              <Trophy size={15} />+{points} XP
+            </strong>
+          </div>
+
+          <button
+            className="quest-card-action"
+            onClick={handleClaim}
+            disabled={submitting}
+            type="button"
+          >
+            {submitting ? "CLAIMING..." : "CLAIM CHECKPOINT"}
+          </button>
+        </>
+      )}
+
+      {status === "CHALLENGE" && (
+        <>
+          <div className="quest-card-message">{discoveryText}</div>
+
+          <div className="quest-clue-box">
+            <div className="quest-clue-label">YOUR CHALLENGE</div>
+            <div className="quest-clue">{challenge.question}</div>
+
+            {challenge.type === "multiple-choice" && (
+              <div className="quest-options">
+                {challenge.options.map((option) => (
+                  <button
+                    key={option}
+                    className={`quest-option ${
+                      answer === option ? "selected" : ""
+                    }`}
+                    onClick={() => handleOptionSelect(option)}
+                    disabled={submitting}
+                    type="button"
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {challenge.type === "riddle" && (
+              <input
+                className="quest-answer-input"
+                type="text"
+                value={answer}
+                onChange={(event) => {
+                  setAnswer(event.target.value);
+                  setFeedback(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !submitting) {
+                    handleSubmit();
+                  }
+                }}
+                placeholder="Enter your answer..."
+                autoComplete="off"
+                disabled={submitting}
+              />
+            )}
+          </div>
+
+          <button
+            className="quest-card-action"
+            onClick={handleSubmit}
+            disabled={submitting}
+            type="button"
+          >
+            {submitting ? "CHECKING ANSWER..." : "SUBMIT ANSWER"}
+          </button>
+        </>
+      )}
+
+      {status === "COMPLETED" && (
+        <>
+          <div className="quest-completed-box">
+            <CheckCircle2 size={22} />
+
+            <div>
+              <strong>Checkpoint Complete!</strong>
+              <span>+{points} XP earned</span>
+            </div>
+          </div>
+
+          {nextClue && (
+            <div className="quest-clue-box">
+              <div className="quest-clue-label">NEXT CLUE</div>
+              <div className="quest-clue">{nextClue}</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {feedback && (
+        <div
+          className={`quest-feedback quest-feedback-${feedback.type}`}
+          role="status"
+          aria-live="polite"
+        >
+          {feedback.message}
+        </div>
+      )}
+    </section>
   );
 }
 

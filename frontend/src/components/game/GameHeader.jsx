@@ -1,5 +1,6 @@
 import { Menu, Trophy } from "lucide-react";
 
+import "./GameHeader.css";
 function GameHeader({ score, onMenuOpen }) {
   return (
     <header className="game-header">

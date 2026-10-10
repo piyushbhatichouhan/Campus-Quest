@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { getFriendlyErrorMessage } from "../utils/authErrors";
 import "./Auth.css";
 
 function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [form, setForm] = useState({
     email: "",
@@ -11,9 +14,12 @@ function Login() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    setErrorMsg("");
 
     setForm((prev) => ({
       ...prev,
@@ -21,14 +27,25 @@ function Login() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
 
-    // Temporary authentication.
-    // Firebase Authentication will replace this later.
-    console.log("Login:", form);
+    if (!form.email.trim() || !form.password) {
+      setErrorMsg("Please enter both email and password.");
+      return;
+    }
 
-    navigate("/game");
+    setSubmitting(true);
+
+    try {
+      await login(form.email.trim(), form.password);
+      navigate("/game");
+    } catch (err) {
+      setErrorMsg(getFriendlyErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -62,6 +79,12 @@ function Login() {
 
           <p className="auth-subtitle">Return to your adventure.</p>
 
+          {errorMsg && (
+            <div className="auth-error-banner" role="alert">
+              {errorMsg}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-field">
               <label htmlFor="email">PLAYER EMAIL</label>
@@ -75,6 +98,7 @@ function Login() {
                 onChange={handleChange}
                 required
                 autoComplete="email"
+                disabled={submitting}
               />
             </div>
 
@@ -91,6 +115,7 @@ function Login() {
                   onChange={handleChange}
                   required
                   autoComplete="current-password"
+                  disabled={submitting}
                 />
 
                 <button
@@ -104,20 +129,12 @@ function Login() {
               </div>
             </div>
 
-            <div className="form-options">
-              <label className="remember-option">
-                <input type="checkbox" />
-                <span className="pixel-checkbox" />
-                Remember me
-              </label>
-
-              <button type="button" className="text-button">
-                Forgot password?
-              </button>
-            </div>
-
-            <button type="submit" className="pixel-button primary">
-              <span>ENTER WORLD</span>
+            <button
+              type="submit"
+              className="pixel-button primary"
+              disabled={submitting}
+            >
+              <span>{submitting ? "LOGGING IN..." : "ENTER WORLD"}</span>
               <span className="button-arrow">▶</span>
             </button>
           </form>

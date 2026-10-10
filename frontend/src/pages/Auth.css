@@ -281,6 +281,19 @@ button {
         6px 7px 0 rgba(0, 0, 0, 0.35);
 }
 
+.auth-error-banner {
+    background: #3b1111;
+    border: 2px solid var(--red);
+    color: #ff9999;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.4;
+    margin-bottom: 14px;
+    box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.4);
+    font-weight: 500;
+}
+
+
 
 /* Top heading */
 

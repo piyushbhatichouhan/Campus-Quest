@@ -1,40 +1,108 @@
-import { useMemo, useState } from "react";
-
-import checkpoints from "../data/checkpoints";
-
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDistanceToCheckpoint, isInsideGeofence } from "../utils/geofence";
+import { gameApi } from "../services/gameApi";
+import { useAuth } from "../context/AuthContext";
 
 function useGameEngine(location) {
-  // --------------------------------------------------
-  // Checkpoints that the player has claimed
-  // --------------------------------------------------
+  const { user } = useAuth();
+  const [checkpoints, setCheckpoints] = useState([]);
+  const [serverState, setServerState] = useState(null);
+  const [loadingGame, setLoadingGame] = useState(true);
+  const [apiError, setApiError] = useState("");
+  const [challengeResults, setChallengeResults] = useState({});
 
-  const [claimedCheckpoints, setClaimedCheckpoints] = useState([]);
+  const refreshState = useCallback(async () => {
+    if (!user) return null;
+    try {
+      const state = await gameApi.getGameState();
+      setServerState(state);
+      return state;
+    } catch (error) {
+      setApiError(error.message);
+      return null;
+    }
+  }, [user]);
 
-  // --------------------------------------------------
-  // Checkpoints that the player has completed
-  // --------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
 
-  const [completedCheckpoints, setCompletedCheckpoints] = useState([]);
+    async function initializeGame() {
+      if (!user) {
+        setLoadingGame(false);
+        return;
+      }
 
-  // --------------------------------------------------
-  // Calculate current state of every checkpoint
-  // --------------------------------------------------
+      setLoadingGame(true);
+      setApiError("");
+
+      try {
+        const [checkpointData, state] = await Promise.all([
+          gameApi.getCheckpoints(),
+          gameApi.startGame(user.displayName),
+        ]);
+
+        if (cancelled) return;
+
+        if (!Array.isArray(checkpointData) || checkpointData.length === 0) {
+          throw new Error("The server returned no checkpoints.");
+        }
+
+        setCheckpoints(checkpointData);
+        setServerState(state);
+      } catch (error) {
+        if (!cancelled) {
+          setApiError(error.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingGame(false);
+        }
+      }
+    }
+
+    initializeGame();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const currentCheckpointIndex = serverState?.gameCompleted
+    ? checkpoints.length
+    : checkpoints.findIndex(
+        (checkpoint) => checkpoint.id === serverState?.currentCheckpoint?.id,
+      );
+
+  const safeIndex = currentCheckpointIndex < 0 ? 0 : currentCheckpointIndex;
+
+  const completedCheckpoints = serverState?.completedCheckpoints;
+  const claimedCheckpointId = serverState?.claimedCheckpointId || null;
+  const score = serverState?.score || 0;
+  const gameCompleted = Boolean(serverState?.gameCompleted);
+  const inventory = serverState?.inventory || [];
+  const rank = serverState?.rank || 1;
+  const level = Math.floor(score / 250) + 1;
+  const nextLevelXP = level * 250;
+
+  const currentCheckpoint = checkpoints[safeIndex] || null;
 
   const checkpointStates = useMemo(() => {
-    return checkpoints.map((checkpoint) => {
+    const completedList = completedCheckpoints || [];
+    return checkpoints.map((checkpoint, index) => {
       const distance = getDistanceToCheckpoint(location, checkpoint);
-
       const inside = isInsideGeofence(location, checkpoint);
 
-      let status = "LOCKED";
+      let status = "HIDDEN";
 
-      if (completedCheckpoints.includes(checkpoint.id)) {
+      if (completedList.includes(checkpoint.id)) {
         status = "COMPLETED";
-      } else if (claimedCheckpoints.includes(checkpoint.id)) {
-        status = "CLAIMED";
-      } else if (inside) {
-        status = "AVAILABLE";
+      } else if (!gameCompleted && index === safeIndex) {
+        status =
+          claimedCheckpointId === checkpoint.id
+            ? "CHALLENGE"
+            : inside
+              ? "DISCOVERED"
+              : "REVEALED";
       }
 
       return {
@@ -44,84 +112,124 @@ function useGameEngine(location) {
         status,
       };
     });
-  }, [location, claimedCheckpoints, completedCheckpoints]);
+  }, [
+    checkpoints,
+    location,
+    completedCheckpoints,
+    gameCompleted,
+    safeIndex,
+    claimedCheckpointId,
+  ]);
 
-  // --------------------------------------------------
-  // Claim a checkpoint
-  // --------------------------------------------------
+  const currentCheckpointState =
+    checkpointStates.find(
+      (checkpoint) => checkpoint.id === currentCheckpoint?.id,
+    ) || null;
 
-  function claimCheckpoint(checkpointId) {
-    const checkpoint = checkpoints.find(
-      (checkpoint) => checkpoint.id === checkpointId,
-    );
+  async function claimCheckpoint(checkpointId) {
+    const checkpoint = checkpoints.find((item) => item.id === checkpointId);
 
-    if (!checkpoint) {
+    if (
+      !checkpoint ||
+      !currentCheckpoint ||
+      checkpointId !== currentCheckpoint.id
+    ) {
       return false;
     }
 
-    // Check player's current GPS position again
-    const inside = isInsideGeofence(location, checkpoint);
-
-    // Player must actually be inside
-    if (!inside) {
+    if (!isInsideGeofence(location, checkpoint)) {
+      setApiError("Move inside the checkpoint area before claiming it.");
       return false;
     }
 
-    // Cannot claim something already claimed
-    if (claimedCheckpoints.includes(checkpointId)) {
+    const latitude =
+      location?.latitude ?? location?.lat ?? location?.coords?.latitude;
+
+    const longitude =
+      location?.longitude ?? location?.lng ?? location?.coords?.longitude;
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setApiError("Your current GPS position is not available yet.");
       return false;
     }
 
-    // Cannot claim something already completed
-    if (completedCheckpoints.includes(checkpointId)) {
+    try {
+      setApiError("");
+
+      await gameApi.claimCheckpoint(checkpointId, latitude, longitude);
+
+      await refreshState();
+      return true;
+    } catch (error) {
+      setApiError(error.message);
       return false;
     }
-
-    setClaimedCheckpoints((current) => [...current, checkpointId]);
-
-    return true;
   }
 
-  // --------------------------------------------------
-  // Complete a checkpoint
-  // --------------------------------------------------
-
-  function completeCheckpoint(checkpointId) {
-    if (!claimedCheckpoints.includes(checkpointId)) {
-      return false;
+  async function submitChallenge(checkpointId, answer) {
+    if (claimedCheckpointId !== checkpointId) {
+      return {
+        success: false,
+        reason: "Claim the checkpoint before solving its challenge.",
+      };
     }
 
-    if (completedCheckpoints.includes(checkpointId)) {
-      return false;
+    try {
+      setApiError("");
+
+      const result = await gameApi.submitChallenge(checkpointId, answer);
+
+      if (!result.success) {
+        setChallengeResults((previous) => ({
+          ...previous,
+          [checkpointId]: false,
+        }));
+
+        return {
+          success: false,
+          reason: result.message || "Incorrect answer. Try again.",
+        };
+      }
+
+      setChallengeResults((previous) => ({
+        ...previous,
+        [checkpointId]: true,
+      }));
+
+      await refreshState();
+
+      return {
+        success: true,
+        points: result.pointsAwarded,
+      };
+    } catch (error) {
+      setApiError(error.message);
+
+      return {
+        success: false,
+        reason: error.message,
+      };
     }
-
-    setCompletedCheckpoints((current) => [...current, checkpointId]);
-
-    return true;
   }
-
-  // --------------------------------------------------
-  // Calculate XP
-  // --------------------------------------------------
-
-  const score = checkpointStates
-    .filter((checkpoint) => checkpoint.status === "COMPLETED")
-    .reduce((total, checkpoint) => total + checkpoint.points, 0);
-
-  // --------------------------------------------------
-  // Return game engine API
-  // --------------------------------------------------
 
   return {
     checkpoints: checkpointStates,
-
-    claimedCheckpoints,
-    completedCheckpoints,
-
-    claimCheckpoint,
-    completeCheckpoint,
-
+    currentCheckpoint: currentCheckpointState,
+    currentCheckpointIndex: safeIndex,
+    claimedCheckpoints: claimedCheckpointId ? [claimedCheckpointId] : [],
+    completedCheckpoints: completedCheckpoints || [],
+    challengeResults,
     score,
+    inventory,
+    rank,
+    level,
+    nextLevelXP,
+    gameCompleted,
+    loadingGame,
+    apiError,
+    claimCheckpoint,
+    submitChallenge,
+    refreshState,
   };
 }
 

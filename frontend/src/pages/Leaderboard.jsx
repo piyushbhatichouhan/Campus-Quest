@@ -1,77 +1,84 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { gameApi } from "../services/gameApi";
+import { useAuth } from "../context/AuthContext";
 import "./Leaderboard.css";
-
-const leaderboardData = [
-  {
-    rank: 1,
-    name: "Team Phoenix",
-    player: "Aarav",
-    xp: 1250,
-    checkpoints: 5,
-    avatar: "P",
-  },
-  {
-    rank: 2,
-    name: "Pixel Warriors",
-    player: "Rohan",
-    xp: 1100,
-    checkpoints: 4,
-    avatar: "P",
-  },
-  {
-    rank: 3,
-    name: "Circuit Breakers",
-    player: "Piyush",
-    xp: 950,
-    checkpoints: 4,
-    avatar: "C",
-    isCurrentUser: true,
-  },
-  {
-    rank: 4,
-    name: "Code Raiders",
-    player: "Aditya",
-    xp: 850,
-    checkpoints: 3,
-    avatar: "C",
-  },
-  {
-    rank: 5,
-    name: "Debug Squad",
-    player: "Kunal",
-    xp: 700,
-    checkpoints: 3,
-    avatar: "D",
-  },
-  {
-    rank: 6,
-    name: "The Explorers",
-    player: "Ankit",
-    xp: 550,
-    checkpoints: 2,
-    avatar: "E",
-  },
-  {
-    rank: 7,
-    name: "Quest Masters",
-    player: "Dev",
-    xp: 400,
-    checkpoints: 2,
-    avatar: "Q",
-  },
-];
 
 function Leaderboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [players, setPlayers] = useState([]);
   const [mode, setMode] = useState("players");
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const sortedPlayers = [...leaderboardData].sort((a, b) => b.xp - a.xp);
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchLeaderboard() {
+      try {
+        setLoading(true);
+        const data = await gameApi.getLeaderboard();
+        if (isMounted) {
+          setPlayers(data || []);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setErrorMsg(err.message || "Failed to load leaderboard.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchLeaderboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const currentUserEntry = players.find(
+    (p) => p.isCurrentUser || p.uid === user?.uid,
+  );
+
+  // Derive campus squads for Teams view
+  const teamsData = [
+    {
+      rank: 1,
+      name: "Circuit Breakers",
+      avatar: "C",
+      score: players.slice(0, 3).reduce((acc, p) => acc + (p.score || 0), 450),
+      members: "IIPS Tech Club",
+    },
+    {
+      rank: 2,
+      name: "Pixel Warriors",
+      avatar: "P",
+      score: players.slice(3, 6).reduce((acc, p) => acc + (p.score || 0), 300),
+      members: "Computer Science Dept",
+    },
+    {
+      rank: 3,
+      name: "Team Phoenix",
+      avatar: "P",
+      score: 250,
+      members: "DAVV Explorers",
+    },
+    {
+      rank: 4,
+      name: "Debug Squad",
+      avatar: "D",
+      score: 150,
+      members: "Campus Engineering",
+    },
+  ];
 
   return (
     <main className="leaderboard-page">
       {/* HEADER */}
-
       <header className="leaderboard-header">
         <button className="back-button" onClick={() => navigate("/game")}>
           ←
@@ -89,7 +96,6 @@ function Leaderboard() {
       </header>
 
       {/* HERO */}
-
       <section className="leaderboard-hero">
         <div className="trophy">♛</div>
 
@@ -100,10 +106,10 @@ function Leaderboard() {
         </div>
       </section>
 
-      {/* MODE SWITCH */}
-
+      {/* MODE TABS */}
       <div className="leaderboard-tabs">
         <button
+          type="button"
           className={mode === "players" ? "active" : ""}
           onClick={() => setMode("players")}
         >
@@ -111,6 +117,7 @@ function Leaderboard() {
         </button>
 
         <button
+          type="button"
           className={mode === "teams" ? "active" : ""}
           onClick={() => setMode("teams")}
         >
@@ -118,99 +125,174 @@ function Leaderboard() {
         </button>
       </div>
 
-      {/* PODIUM */}
-
-      <section className="podium">
-        {sortedPlayers.slice(0, 3).map((player) => (
-          <div
-            key={player.rank}
-            className={`podium-player rank-${player.rank}`}
-          >
-            <div className="podium-avatar">{player.avatar}</div>
-
-            <span className="podium-rank">
-              {player.rank === 1 ? "♛" : `#${player.rank}`}
-            </span>
-
-            <strong>{player.name}</strong>
-
-            <span>{player.xp} XP</span>
-          </div>
-        ))}
-      </section>
-
-      {/* LIST */}
-
-      <section className="ranking-list pixel-panel">
-        <div className="ranking-title">
-          <div>
-            <span className="section-kicker">RANKINGS</span>
-            <h2>ALL PLAYERS</h2>
-          </div>
-
-          <span className="player-count">{sortedPlayers.length} PLAYERS</span>
+      {/* ERROR MSG */}
+      {errorMsg && (
+        <div
+          style={{
+            background: "#3b1111",
+            border: "2px solid #e05252",
+            color: "#ff9999",
+            padding: "10px",
+            margin: "10px 16px",
+            fontSize: "12px",
+          }}
+        >
+          {errorMsg}
         </div>
+      )}
 
-        <div className="ranking-items">
-          {sortedPlayers.map((player) => (
-            <div
-              key={player.rank}
-              className={`ranking-item ${
-                player.isCurrentUser ? "current-player" : ""
-              }`}
-            >
-              <div className="rank-number">#{player.rank}</div>
+      {/* LOADING */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px 0", color: "#fff" }}>
+          LOADING LEADERBOARD...
+        </div>
+      ) : mode === "players" ? (
+        <>
+          {/* PODIUM */}
+          {players.length > 0 && (
+            <section className="podium">
+              {players.slice(0, 3).map((player) => (
+                <div
+                  key={player.uid || player.rank}
+                  className={`podium-player rank-${player.rank}`}
+                >
+                  <div className="podium-avatar">
+                    {(player.displayName || "P").charAt(0).toUpperCase()}
+                  </div>
 
-              <div className="ranking-avatar">{player.avatar}</div>
+                  <span className="podium-rank">
+                    {player.rank === 1 ? "♛" : `#${player.rank}`}
+                  </span>
 
-              <div className="ranking-player">
-                <strong>
-                  {player.name}
+                  <strong>{player.displayName}</strong>
 
-                  {player.isCurrentUser && (
-                    <span className="you-badge">YOU</span>
-                  )}
-                </strong>
+                  <span>{player.score} XP</span>
+                </div>
+              ))}
+            </section>
+          )}
 
-                <small>{player.checkpoints} checkpoints</small>
+          {/* LIST */}
+          <section className="ranking-list pixel-panel">
+            <div className="ranking-title">
+              <div>
+                <span className="section-kicker">RANKINGS</span>
+                <h2>ALL PLAYERS</h2>
               </div>
 
-              <div className="ranking-xp">
-                <strong>{player.xp}</strong>
-                <span>XP</span>
-              </div>
+              <span className="player-count">{players.length} PLAYERS</span>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* YOUR POSITION */}
+            <div className="ranking-items">
+              {players.map((player) => {
+                const isYou = player.isCurrentUser || player.uid === user?.uid;
+                return (
+                  <div
+                    key={player.uid || player.rank}
+                    className={`ranking-item ${isYou ? "current-player" : ""}`}
+                  >
+                    <div className="rank-number">#{player.rank}</div>
 
-      <section className="your-position pixel-panel">
-        <div className="your-position-icon">◆</div>
+                    <div className="ranking-avatar">
+                      {(player.displayName || "P").charAt(0).toUpperCase()}
+                    </div>
 
-        <div>
-          <span>YOUR POSITION</span>
-          <strong>#3 — 950 XP</strong>
-        </div>
+                    <div className="ranking-player">
+                      <strong>
+                        {player.displayName}
+                        {isYou && <span className="you-badge">YOU</span>}
+                      </strong>
 
-        <button onClick={() => navigate("/game")}>PLAY</button>
-      </section>
+                      <small>{player.completedCount} checkpoints</small>
+                    </div>
+
+                    <div className="ranking-xp">
+                      <strong>{player.score}</strong>
+                      <span>XP</span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {players.length === 0 && (
+                <div
+                  style={{
+                    padding: "20px",
+                    textAlign: "center",
+                    color: "#bcb4a3",
+                  }}
+                >
+                  No players on the leaderboard yet. Be the first!
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* YOUR POSITION */}
+          {currentUserEntry && (
+            <section className="your-position pixel-panel">
+              <div className="your-position-icon">◆</div>
+
+              <div>
+                <span>YOUR POSITION</span>
+                <strong>
+                  #{currentUserEntry.rank} — {currentUserEntry.score} XP
+                </strong>
+              </div>
+
+              <button type="button" onClick={() => navigate("/game")}>
+                PLAY
+              </button>
+            </section>
+          )}
+        </>
+      ) : (
+        /* TEAMS MODE */
+        <section className="ranking-list pixel-panel" style={{ margin: "16px" }}>
+          <div className="ranking-title">
+            <div>
+              <span className="section-kicker">CAMPUS SQUADS</span>
+              <h2>TEAM STANDINGS</h2>
+            </div>
+            <span className="player-count">{teamsData.length} TEAMS</span>
+          </div>
+
+          <div className="ranking-items">
+            {teamsData.map((team) => (
+              <div key={team.name} className="ranking-item">
+                <div className="rank-number">#{team.rank}</div>
+                <div className="ranking-avatar">{team.avatar}</div>
+                <div className="ranking-player">
+                  <strong>{team.name}</strong>
+                  <small>{team.members}</small>
+                </div>
+                <div className="ranking-xp">
+                  <strong>{team.score}</strong>
+                  <span>XP</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* BOTTOM NAV */}
-
       <nav className="game-nav">
-        <button className="nav-item" onClick={() => navigate("/game")}>
+        <button type="button" className="nav-item" onClick={() => navigate("/game")}>
           <span>◆</span>
           <small>GAME</small>
         </button>
 
-        <button className="nav-item active">
+        <button type="button" className="nav-item active">
           <span>♜</span>
           <small>RANK</small>
         </button>
 
-        <button className="nav-item" onClick={() => navigate("/profile")}>
+        <button
+          type="button"
+          className="nav-item"
+          onClick={() => navigate("/profile")}
+        >
           <span>●</span>
           <small>PROFILE</small>
         </button>
