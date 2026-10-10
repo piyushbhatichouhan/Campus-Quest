@@ -119,4 +119,10 @@ router.post(
   }),
 );
 
+router.get("/api/config", (req, res) => {
+  res.json({
+    apiBaseUrl: process.env.PUBLIC_API_BASE_URL || "",
+  });
+});
+
 module.exports = router;
