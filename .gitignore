@@ -1,9 +1,35 @@
-/architecture.md
+# Environment variable files containing secrets
 backend/.env
-backend/node_modules
-frontend/node_modules
-backend/service-account*.json
-backend/*-service-account*.json
-backend/firebase-admin-key.json
+backend/.env.local
+backend/.env.*.local
 frontend/.env
-backend/src/tests
+frontend/.env.local
+frontend/.env.*.local
+
+# Firebase Service Account private keys
+*.json.secret
+backend/firebase-admin-key.json
+backend/*service-account*.json
+backend/service-account*.json
+*firebase-admin-key*.json
+*service-account*.json
+
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Production build artifacts
+frontend/dist/
+frontend/dist-ssr/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System & OS files
+.DS_Store
+Thumbs.db
+/architecture.md

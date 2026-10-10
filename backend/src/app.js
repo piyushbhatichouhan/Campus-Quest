@@ -18,12 +18,13 @@ const allowedOrigins = (
   process.env.ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:3000"
 )
   .split(",")
-  .map((o) => o.trim());
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, same-origin) or in allowed list
+      // Allow requests with no origin (e.g. mobile apps, curl, same-origin, Render health-checks) or in allowed list
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -40,6 +41,15 @@ app.use(express.json({ limit: "10kb" }));
 
 // Global rate limiting
 app.use(globalLimiter);
+
+// Lightweight Render and load-balancer health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

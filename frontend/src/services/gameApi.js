@@ -1,7 +1,15 @@
 import { auth } from "../config/firebase";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+// Support both VITE_API_BASE_URL and VITE_API_URL with automatic /api normalization
+const rawUrl =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5000/api";
+
+const trimmedUrl = rawUrl.replace(/\/+$/, "");
+const API_BASE_URL = trimmedUrl.endsWith("/api")
+  ? trimmedUrl
+  : `${trimmedUrl}/api`;
 
 async function request(endpoint, options = {}, requiresAuth = true) {
   let token = null;
