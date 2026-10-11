@@ -598,4 +598,40 @@ test("Campus Quest Global Event Lifecycle, Race Leaderboard & Admin Analytics Su
       );
     },
   );
+
+  await t.test(
+    "13. Start New Event: Admin can reset to waiting or start a new event after stopping/completing",
+    async () => {
+      // Reset to waiting (open lobby) while keeping teams
+      const resetRes = await request(app)
+        .post("/api/admin/event/new")
+        .set("Authorization", adminToken)
+        .send({ startImmediately: false, clearTeams: false });
+      assert.strictEqual(resetRes.status, 200);
+      assert.strictEqual(resetRes.body.data.status, "waiting");
+
+      // Verify team progress was reset to 0/10
+      const resetGame = await getGameState(testLeaderUid);
+      assert.strictEqual(resetGame.eventStatus, "waiting");
+      assert.strictEqual(resetGame.score, 0);
+      assert.strictEqual(resetGame.completedCheckpoints.length, 0);
+
+      // Start the newly prepared event
+      const startAgainRes = await request(app)
+        .post("/api/admin/event/start")
+        .set("Authorization", adminToken);
+      assert.strictEqual(startAgainRes.status, 200);
+      assert.strictEqual(startAgainRes.body.data.status, "active");
+
+      // Stop it again, then start a new event immediately from stopped status
+      await stopEvent(adminUser);
+      const immediateNewRes = await request(app)
+        .post("/api/admin/event/new")
+        .set("Authorization", adminToken)
+        .send({ startImmediately: true, clearTeams: false });
+      assert.strictEqual(immediateNewRes.status, 200);
+      assert.strictEqual(immediateNewRes.body.data.status, "active");
+      assert.ok(immediateNewRes.body.data.startedAt);
+    },
+  );
 });

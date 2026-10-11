@@ -287,6 +287,10 @@
   background: #23191b;
 }
 
+.admin-control-card.new-event-zone {
+  border-top: 5px solid #2196f3;
+}
+
 .admin-control-card h3 {
   margin: 0 0 8px;
   font-family: "Press Start 2P", monospace;
@@ -353,6 +357,18 @@
 
 .admin-action-btn.finalize-btn:hover:not(:disabled) {
   background: #ffcf4d;
+}
+
+.admin-action-btn.new-event-btn {
+  background: #1976d2;
+  color: #ffffff;
+  box-shadow:
+    inset -3px -3px 0 #0d47a1,
+    inset 3px 3px 0 #64b5f6;
+}
+
+.admin-action-btn.new-event-btn:hover:not(:disabled) {
+  background: #1e88e5;
 }
 
 /* TABS */

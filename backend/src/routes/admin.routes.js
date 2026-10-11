@@ -7,6 +7,7 @@ const {
   startEvent,
   stopEvent,
   finalizeEvent,
+  resetEventForNewRound,
   getAdminOverview,
   getAdminTeamsList,
   getAdminTeamDetail,
@@ -38,15 +39,18 @@ router.get(
 );
 
 // Explicitly block event lifecycle mutations via GET requests
-router.get(["/event/start", "/event/stop", "/event/finalize"], (req, res) => {
-  res.status(405).json({
-    success: false,
-    error: {
-      code: "METHOD_NOT_ALLOWED",
-      message: "Event lifecycle control operations require a POST request.",
-    },
-  });
-});
+router.get(
+  ["/event/start", "/event/stop", "/event/finalize", "/event/new", "/event/reset"],
+  (req, res) => {
+    res.status(405).json({
+      success: false,
+      error: {
+        code: "METHOD_NOT_ALLOWED",
+        message: "Event lifecycle control operations require a POST request.",
+      },
+    });
+  },
+);
 
 // POST /api/admin/event/start - Start event across all teams (waiting -> active)
 router.post(
@@ -74,6 +78,19 @@ router.post(
   actionLimiter,
   asyncHandler(async (req, res) => {
     const data = await finalizeEvent(req.user);
+    res.json({ success: true, data });
+  }),
+);
+
+// POST /api/admin/event/new (and /event/reset) - Prepare or start a new event after stopping/completing
+router.post(
+  ["/event/new", "/event/reset"],
+  actionLimiter,
+  asyncHandler(async (req, res) => {
+    const data = await resetEventForNewRound(req.user, {
+      startImmediately: Boolean(req.body?.startImmediately),
+      clearTeams: Boolean(req.body?.clearTeams),
+    });
     res.json({ success: true, data });
   }),
 );

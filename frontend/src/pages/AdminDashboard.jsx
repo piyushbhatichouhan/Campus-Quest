@@ -49,9 +49,10 @@ function AdminDashboard() {
   const [feedback, setFeedback] = useState(null); // { type: "success" | "error", message: string }
 
   // Confirmation modal states:
-  // modalFlow: null | "start_1" | "start_2" | "stop_1" | "stop_2" | "finalize"
+  // modalFlow: null | "start_1" | "start_2" | "stop_1" | "stop_2" | "finalize" | "new_event"
   const [modalFlow, setModalFlow] = useState(null);
   const [confirmInput, setConfirmInput] = useState("");
+  const [newEventClearTeams, setNewEventClearTeams] = useState(false);
 
   // Live competition timer state
   const [liveElapsed, setLiveElapsed] = useState(0);
@@ -174,7 +175,15 @@ function AdminDashboard() {
 
   // Modal flow handlers
   const openStartModal1 = () => {
-    if (actionLoading || overview?.event?.status !== "waiting") return;
+    if (actionLoading) return;
+    if (
+      overview?.event?.status === "stopped" ||
+      overview?.event?.status === "completed"
+    ) {
+      openNewEventModal();
+      return;
+    }
+    if (overview?.event?.status !== "waiting") return;
     setConfirmInput("");
     setModalFlow("start_1");
   };
@@ -200,6 +209,19 @@ function AdminDashboard() {
   const openFinalizeModal = () => {
     if (actionLoading || overview?.event?.status !== "stopped") return;
     setModalFlow("finalize");
+  };
+
+  const openNewEventModal = () => {
+    if (
+      actionLoading ||
+      (overview?.event?.status !== "stopped" &&
+        overview?.event?.status !== "completed")
+    ) {
+      return;
+    }
+    setConfirmInput("");
+    setNewEventClearTeams(false);
+    setModalFlow("new_event");
   };
 
   const closeModal = () => {
@@ -279,6 +301,40 @@ function AdminDashboard() {
       setFeedback({
         type: "error",
         message: err.message || "Failed to finalize event results.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Authoritative Start / Prepare New Event mutation
+  const executeNewEvent = async (startImmediately) => {
+    if (actionLoading || confirmInput !== "NEW EVENT") return;
+    setActionLoading(true);
+    setFeedback(null);
+
+    try {
+      await gameApi.adminStartNewEvent({
+        startImmediately,
+        clearTeams: newEventClearTeams,
+      });
+      setModalFlow(null);
+      setConfirmInput("");
+      if (newEventClearTeams) {
+        setSelectedTeamId(null);
+        setTeamDetail(null);
+      }
+      await fetchDashboardData(false);
+      setFeedback({
+        type: "success",
+        message: startImmediately
+          ? "A new Campus Quest event is now ACTIVE! Timer and team progress have been reset."
+          : "New event prepared in WAITING (Lobby) state. Team registration is open and ready to start!",
+      });
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err.message || "Failed to start new event.",
       });
     } finally {
       setActionLoading(false);
@@ -490,7 +546,7 @@ function AdminDashboard() {
             {/* 1. START EVENT CONTROL */}
             <div className="admin-control-card start-zone">
               <div>
-                <span className="admin-kicker">PHASE 1 •WAITING → ACTIVE</span>
+                <span className="admin-kicker">PHASE 1 • WAITING → ACTIVE</span>
                 <h3>START COMPETITION</h3>
                 <p>
                   Simultaneously begins the adventure for all registered teams,
@@ -501,12 +557,14 @@ function AdminDashboard() {
               <button
                 type="button"
                 className="admin-action-btn start-btn"
-                disabled={actionLoading || event.status !== "waiting"}
+                disabled={actionLoading || event.status === "active"}
                 onClick={openStartModal1}
               >
                 {event.status === "waiting"
                   ? "START EVENT"
-                  : "EVENT ALREADY STARTED"}
+                  : event.status === "active"
+                    ? "EVENT IN PROGRESS"
+                    : "START NEW EVENT"}
               </button>
             </div>
 
@@ -557,6 +615,34 @@ function AdminDashboard() {
                 {event.status === "stopped" || event.status === "completed"
                   ? "EVENT STOPPED"
                   : "STOP EVENT"}
+              </button>
+            </div>
+
+            {/* 4. NEW EVENT / RESET LOBBY CONTROL */}
+            <div className="admin-control-card new-event-zone">
+              <div>
+                <span className="admin-kicker" style={{ color: "#64b5f6" }}>
+                  PHASE 4 • STOPPED / COMPLETED → NEW EVENT
+                </span>
+                <h3>START NEW EVENT</h3>
+                <p>
+                  After stopping or finalizing an event, reset the competition
+                  timer and team progress to open the lobby for registration or
+                  immediately launch a brand-new event.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="admin-action-btn new-event-btn"
+                disabled={
+                  actionLoading ||
+                  (event.status !== "stopped" && event.status !== "completed")
+                }
+                onClick={openNewEventModal}
+              >
+                {event.status === "stopped" || event.status === "completed"
+                  ? "NEW EVENT / RESET"
+                  : "STOP EVENT FIRST"}
               </button>
             </div>
           </div>
@@ -1070,6 +1156,143 @@ function AdminDashboard() {
                 disabled={actionLoading}
               >
                 {actionLoading ? "Finalizing..." : "Finalize Results"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          CONFIRMATION MODAL — START / PREPARE NEW EVENT
+          ========================================================= */}
+      {modalFlow === "new_event" && (
+        <div className="admin-modal-overlay" role="dialog" aria-modal="true">
+          <div className="admin-modal-card">
+            <span className="admin-modal-step-tag" style={{ color: "#64b5f6" }}>
+              NEW COMPETITION ROUND • RESET & LAUNCH
+            </span>
+            <h2 className="admin-modal-title">Start a New Event?</h2>
+            <p className="admin-modal-message">
+              Choose how existing teams should be handled, then either open the
+              waiting lobby for team registration or start the new event
+              immediately.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                background: "#16181b",
+                border: "2px solid #2b2f36",
+                padding: "12px 14px",
+                marginBottom: "16px",
+                fontSize: "13px",
+                color: "#e5e7eb",
+              }}
+            >
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="newEventTeamsMode"
+                  checked={!newEventClearTeams}
+                  onChange={() => setNewEventClearTeams(false)}
+                  disabled={actionLoading}
+                  style={{ marginTop: "3px" }}
+                />
+                <span>
+                  <strong>Keep registered teams</strong> — Reset all teams&apos;
+                  checkpoint progress, inventory, and XP to 0 so existing squads
+                  can play the new round.
+                </span>
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="newEventTeamsMode"
+                  checked={newEventClearTeams}
+                  onChange={() => setNewEventClearTeams(true)}
+                  disabled={actionLoading}
+                  style={{ marginTop: "3px" }}
+                />
+                <span>
+                  <strong style={{ color: "#ff8a80" }}>
+                    Remove all existing teams
+                  </strong>{" "}
+                  — Clear all registered squads and join codes so players
+                  register fresh teams.
+                </span>
+              </label>
+            </div>
+
+            <div className="admin-modal-input-block">
+              <label htmlFor="new-event-confirm-input">
+                Type <strong>NEW EVENT</strong> to confirm:
+              </label>
+              <input
+                id="new-event-confirm-input"
+                type="text"
+                className="admin-modal-input"
+                placeholder="NEW EVENT"
+                value={confirmInput}
+                onChange={(e) => setConfirmInput(e.target.value)}
+                autoComplete="off"
+                disabled={actionLoading}
+              />
+            </div>
+
+            <div className="admin-modal-actions" style={{ flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="admin-modal-btn secondary"
+                onClick={closeModal}
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-modal-btn secondary"
+                style={{
+                  borderColor: "#2196f3",
+                  color: "#64b5f6",
+                }}
+                disabled={confirmInput !== "NEW EVENT" || actionLoading}
+                onClick={() => executeNewEvent(false)}
+              >
+                {actionLoading ? "Resetting..." : "Open Lobby (Waiting)"}
+              </button>
+              <button
+                type="button"
+                className="admin-modal-btn primary"
+                disabled={
+                  confirmInput !== "NEW EVENT" ||
+                  actionLoading ||
+                  newEventClearTeams
+                }
+                title={
+                  newEventClearTeams
+                    ? "Open the lobby first when clearing all teams so new teams can register"
+                    : "Reset progress and start the new competition immediately"
+                }
+                onClick={() => executeNewEvent(true)}
+              >
+                {actionLoading ? "Starting..." : "Start New Event Now"}
               </button>
             </div>
           </div>

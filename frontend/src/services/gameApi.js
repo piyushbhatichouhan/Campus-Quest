@@ -182,6 +182,13 @@ export const gameApi = {
     });
   },
 
+  adminStartNewEvent({ startImmediately = false, clearTeams = false } = {}) {
+    return request("/admin/event/new", {
+      method: "POST",
+      body: JSON.stringify({ startImmediately, clearTeams }),
+    });
+  },
+
   getAdminOverview() {
     return request("/admin/overview");
   },

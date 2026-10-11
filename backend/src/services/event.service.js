@@ -335,6 +335,139 @@ async function finalizeEvent(adminUser) {
 }
 
 /**
+ * Admin action: Prepare or immediately start a new event after an event is stopped or completed.
+ * Transition: stopped | completed -> waiting (or active if startImmediately is true)
+ */
+async function resetEventForNewRound(
+  adminUser,
+  { startImmediately = false, clearTeams = false } = {},
+) {
+  if (!adminUser) {
+    throw new EventError(
+      "Administrator authentication required.",
+      401,
+      "UNAUTHORIZED",
+    );
+  }
+
+  const adminId = adminUser.email || adminUser.uid || "admin";
+  const eventRef = eventsCollection.doc(MAIN_EVENT_ID);
+  const nextStatus = startImmediately ? "active" : "waiting";
+
+  await db.runTransaction(async (transaction) => {
+    const { eventData } = await getOrCreateEventDoc(transaction);
+
+    if (eventData.status === "active") {
+      throw new EventError(
+        "Cannot start a new event while an event is currently active. Stop the current event first.",
+        400,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    const ts = serverTimestamp();
+
+    transaction.update(eventRef, {
+      status: nextStatus,
+      startedAt: startImmediately ? ts : null,
+      stoppedAt: null,
+      finalizedAt: null,
+      startedBy: startImmediately ? adminId : null,
+      stoppedBy: null,
+      finalizedBy: null,
+      updatedAt: ts,
+    });
+  });
+
+  // Reset or clear teams & players for the new event
+  try {
+    const teamsSnap = await teamsCollection.get();
+
+    if (clearTeams) {
+      const teamCodesCollection = db.collection("teamCodes");
+      const [codesSnap, playersSnap] = await Promise.all([
+        teamCodesCollection.get(),
+        playersCollection.get(),
+      ]);
+
+      await Promise.all([
+        ...teamsSnap.docs.map(async (teamDoc) => {
+          const teamRef = teamsCollection.doc(teamDoc.id);
+          const [membersSnap, eventsSnap] = await Promise.all([
+            teamRef.collection("members").get(),
+            teamRef.collection("events").get(),
+          ]);
+          await Promise.all([
+            ...membersSnap.docs.map((m) =>
+              teamRef.collection("members").doc(m.id).delete(),
+            ),
+            ...eventsSnap.docs.map((ev) =>
+              teamRef.collection("events").doc(ev.id).delete(),
+            ),
+          ]);
+          await teamRef.delete();
+        }),
+        ...codesSnap.docs.map((c) => teamCodesCollection.doc(c.id).delete()),
+        ...playersSnap.docs.map((p) =>
+          playersCollection.doc(p.id).update({
+            teamId: null,
+            role: null,
+            updatedAt: serverTimestamp(),
+          }),
+        ),
+      ]);
+    } else {
+      await Promise.all(
+        teamsSnap.docs.map(async (teamDoc) => {
+          const teamRef = teamsCollection.doc(teamDoc.id);
+          const ts = serverTimestamp();
+
+          await teamRef.update({
+            status: nextStatus,
+            score: 0,
+            currentCheckpointIndex: 0,
+            claimedCheckpointId: null,
+            completedCheckpoints: [],
+            checkpointProgress: {},
+            inventory: [],
+            completedAt: null,
+            lastCheckpointCompletedAt: null,
+            gameCompleted: false,
+            updatedAt: ts,
+            lastScoreUpdatedAt: ts,
+          });
+
+          const evRef = teamRef.collection("events").doc();
+          await evRef.set({
+            id: evRef.id,
+            type: startImmediately ? "event_started" : "event_reset",
+            actorUid: adminUser.uid || "admin",
+            actorName: "Administrator",
+            message: startImmediately
+              ? "A new Campus Quest competition has started! Your first mystery clue is now unlocked."
+              : "A new Campus Quest event has been prepared by the administrator. Waiting in lobby for launch!",
+            createdAt: ts,
+          });
+        }),
+      );
+    }
+  } catch {
+    // Non-fatal team reset/broadcast error
+  }
+
+  const updatedSnap = await eventRef.get();
+  const updatedEvent = updatedSnap.data() || {};
+
+  return {
+    success: true,
+    status: nextStatus,
+    startedAt: toIso(updatedEvent.startedAt),
+    startedBy: updatedEvent.startedBy || null,
+    clearTeams: Boolean(clearTeams),
+  };
+}
+
+/**
  * Admin overview metrics.
  */
 async function getAdminOverview() {
@@ -573,6 +706,7 @@ module.exports = {
   startEvent,
   stopEvent,
   finalizeEvent,
+  resetEventForNewRound,
   getAdminOverview,
   getAdminTeamsList,
   getAdminTeamDetail,
