@@ -1,0 +1,153 @@
+.quest-panel {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    z-index: 1000;
+
+    padding: 18px;
+
+    background: #21180f;
+    border: 2px solid #8b5a2b;
+    border-radius: 12px;
+
+    color: #f5ead7;
+
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.quest-panel-empty {
+    opacity: 0.9;
+}
+
+.quest-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.quest-panel-label {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: #f5c542;
+}
+
+.quest-close-button {
+    width: 32px;
+    height: 32px;
+
+    border: 1px solid #8b5a2b;
+    border-radius: 6px;
+
+    background: #332315;
+    color: #f5ead7;
+
+    font-size: 22px;
+    line-height: 1;
+
+    cursor: pointer;
+}
+
+.quest-close-button:hover {
+    background: #4a321d;
+}
+
+.quest-panel-title {
+    margin: 8px 0 4px;
+
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.quest-distance {
+    margin-bottom: 14px;
+
+    font-size: 13px;
+    color: #b9aa96;
+}
+
+.quest-panel-section {
+    margin-top: 14px;
+    padding: 12px;
+
+    background: #2c2015;
+    border: 1px solid #5e4227;
+    border-radius: 8px;
+}
+
+.quest-section-label {
+    margin-bottom: 6px;
+
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+
+    color: #d99b3d;
+}
+
+.quest-panel-section p {
+    margin: 4px 0;
+
+    line-height: 1.5;
+}
+
+.quest-clue {
+    font-size: 16px;
+    font-style: italic;
+}
+
+.quest-action-button {
+    width: 100%;
+
+    margin-top: 16px;
+    padding: 12px;
+
+    border: 2px solid #b87928;
+    border-radius: 7px;
+
+    background: #9a641f;
+    color: #fff4df;
+
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+
+    cursor: pointer;
+}
+
+.quest-action-button:hover {
+    background: #b87928;
+}
+
+.quest-completed {
+    margin-top: 16px;
+    padding: 12px;
+
+    border: 1px solid #3c8f55;
+    border-radius: 8px;
+
+    background: #173a25;
+    color: #6ee28d;
+
+    text-align: center;
+    font-weight: 800;
+}
+
+.quest-reward {
+    color: #f5c542;
+    font-weight: 800;
+}
+
+/* Desktop */
+
+@media (min-width: 768px) {
+    .quest-panel {
+        left: auto;
+        right: 24px;
+        bottom: 24px;
+
+        width: 360px;
+    }
+}

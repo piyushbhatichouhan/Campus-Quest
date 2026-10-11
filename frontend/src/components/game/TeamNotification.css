@@ -1,0 +1,83 @@
+/* =========================================================
+   TEAM NOTIFICATION TOAST - MINECRAFT PIXEL ART THEME
+   ========================================================= */
+
+.team-notification-container {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 90%;
+  max-width: 440px;
+  pointer-events: none;
+}
+
+.team-notification-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #202326;
+  border: 3px solid #111315;
+  box-shadow:
+    inset -2px -2px 0px 0px #151719,
+    inset 2px 2px 0px 0px #383d42,
+    4px 4px 0px 0px rgba(0, 0, 0, 0.5);
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  color: #ffffff;
+  animation: toast-slide-down 0.25s ease-out;
+}
+
+.team-notification-toast.claim {
+  border-left: 6px solid #4caf50;
+}
+
+.team-notification-toast.challenge {
+  border-left: 6px solid #f5c542;
+}
+
+.team-notification-toast.unlock {
+  border-left: 6px solid #2196f3;
+}
+
+.team-notification-toast.complete {
+  border-left: 6px solid #9c27b0;
+}
+
+.team-toast-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.team-toast-body {
+  flex: 1;
+}
+
+.team-toast-actor {
+  color: #f5c542;
+  font-weight: bold;
+}
+
+.team-toast-xp {
+  color: #81c784;
+  margin-top: 4px;
+  font-size: 8px;
+}
+
+@keyframes toast-slide-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

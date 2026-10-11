@@ -1,0 +1,276 @@
+/* =========================================================
+   TEAM LOBBY - MINECRAFT PIXEL ART THEME
+   ========================================================= */
+
+.lobby-page {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: #1a1c1e;
+  font-family: "Press Start 2P", monospace;
+  box-sizing: border-box;
+}
+
+.lobby-container {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 10;
+}
+
+.lobby-card {
+  background: #25282c;
+  border: 4px solid #111315;
+  box-shadow:
+    inset -4px -4px 0px 0px #1a1c1e,
+    inset 4px 4px 0px 0px #383c42,
+    6px 6px 0px 0px rgba(0, 0, 0, 0.45);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.lobby-header {
+  text-align: center;
+  border-bottom: 2px dashed #3a3e44;
+  padding-bottom: 16px;
+}
+
+.lobby-kicker {
+  font-size: 8px;
+  color: #f5c542;
+  letter-spacing: 2px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.lobby-team-name {
+  font-size: 16px;
+  color: #ffffff;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0px #000;
+  word-break: break-word;
+}
+
+/* CODE BOX */
+.lobby-code-box {
+  background: #151719;
+  border: 3px solid #111315;
+  box-shadow: inset 2px 2px 0px 0px rgba(0, 0, 0, 0.5);
+  padding: 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.lobby-code-label {
+  font-size: 8px;
+  color: #858c93;
+  letter-spacing: 1px;
+}
+
+.lobby-code-value {
+  font-size: 24px;
+  color: #64b5f6;
+  letter-spacing: 4px;
+  font-weight: bold;
+  text-shadow: 2px 2px 0px #000;
+}
+
+.lobby-copy-btn {
+  background: #383d42;
+  border: 2px solid #111315;
+  box-shadow:
+    inset -2px -2px 0px 0px #24272a,
+    inset 2px 2px 0px 0px #4e545b;
+  color: #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.lobby-copy-btn:hover {
+  background: #464c52;
+}
+
+.lobby-copy-btn:active {
+  transform: translate(2px, 2px);
+}
+
+/* ROSTER */
+.lobby-roster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-roster-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #bcb4a3;
+  border-bottom: 2px solid #33363b;
+  padding-bottom: 6px;
+}
+
+.lobby-member-count {
+  color: #81c784;
+}
+
+.lobby-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lobby-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1c1e21;
+  border: 2px solid #111315;
+  padding: 10px 12px;
+  font-size: 10px;
+  color: #ffffff;
+}
+
+.lobby-member-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lobby-leader-star {
+  color: #f5c542;
+  font-size: 12px;
+}
+
+.lobby-you-badge {
+  font-size: 7px;
+  background: #2e7d32;
+  color: #fff;
+  padding: 2px 4px;
+  margin-left: 6px;
+  border: 1px solid #111315;
+}
+
+.lobby-leader-badge {
+  font-size: 7px;
+  color: #f5c542;
+  margin-left: 4px;
+}
+
+.lobby-kick-btn {
+  background: #d32f2f;
+  border: 1px solid #111315;
+  color: #fff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.lobby-empty-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px dashed #3a3e44;
+  padding: 10px;
+  font-size: 8px;
+  color: #555b63;
+}
+
+/* STATUS */
+.lobby-status-banner {
+  background: #182230;
+  border: 2px solid #2196f3;
+  color: #90caf9;
+  font-size: 9px;
+  padding: 10px;
+  text-align: center;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #4caf50;
+  border-radius: 50%;
+  animation: pulse-glow 1.5s infinite;
+}
+
+@keyframes pulse-glow {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+/* ACTIONS */
+.lobby-start-btn {
+  background: #2e7d32;
+  border: 3px solid #111315;
+  box-shadow:
+    inset -3px -3px 0px 0px #1b5e20,
+    inset 3px 3px 0px 0px #4caf50,
+    3px 3px 0px 0px rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  padding: 14px;
+  width: 100%;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.1s;
+}
+
+.lobby-start-btn:hover:not(:disabled) {
+  background: #388e3c;
+}
+
+.lobby-start-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+}
+
+.lobby-start-btn:disabled {
+  background: #424242;
+  color: #9e9e9e;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.lobby-leave-btn {
+  background: transparent;
+  border: 2px solid #4a4f56;
+  color: #bcb4a3;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 10px;
+  width: 100%;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.lobby-leave-btn:hover {
+  background: #2c3034;
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}

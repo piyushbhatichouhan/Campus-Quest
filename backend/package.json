@@ -1,0 +1,28 @@
+{
+  "name": "campus-quest-backend",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.7",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "firebase-admin": "^14.5.0",
+    "helmet": "^8.3.0",
+    "react-router-dom": "^7.18.4",
+    "supertest": "^7.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  },
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "test:firebase": "node src/config/firebase.test.js",
+    "test:security": "node --test src/tests/security.test.js",
+    "test:integration": "node --test src/tests/gameIntegration.test.js",
+    "test": "node --test src/tests/*.test.js"
+  }
+}
