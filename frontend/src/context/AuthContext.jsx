@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   updateProfile,
 } from "firebase/auth";
-import { auth } from "../config/firebase";
+import { auth, initializeFirebase } from "../config/firebase";
 import { gameApi } from "../services/gameApi";
 
 const AuthContext = createContext(null);
@@ -21,7 +21,8 @@ export function AuthProvider({ children }) {
 
   // Resolves the authenticated user's team membership from the backend
   const refreshTeam = useCallback(async (targetUser = null) => {
-    const activeUser = targetUser || auth.currentUser;
+    const { auth: firebaseAuth } = await initializeFirebase();
+    const activeUser = targetUser || firebaseAuth?.currentUser;
     if (!activeUser) {
       setTeam(null);
       return null;
@@ -47,27 +48,44 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        await refreshTeam(currentUser);
-      } else {
-        setTeam(null);
-      }
-      setLoading(false);
-    });
+    let unsubscribe = () => {};
+    let isMounted = true;
 
-    return () => unsubscribe();
+    initializeFirebase()
+      .then(({ auth: firebaseAuth }) => {
+        if (!isMounted) return;
+        unsubscribe = onAuthStateChanged(firebaseAuth, async (currentUser) => {
+          setUser(currentUser);
+          if (currentUser) {
+            await refreshTeam(currentUser);
+          } else {
+            setTeam(null);
+          }
+          setLoading(false);
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to initialize Firebase Auth:", err);
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [refreshTeam]);
 
   // Leader Registration: Creates email/password Firebase user + backend team
   const registerLeader = async ({ email, password, leaderName, teamName }) => {
-    let currentUser = auth.currentUser;
+    const { auth: firebaseAuth } = await initializeFirebase();
+    let currentUser = firebaseAuth.currentUser;
 
     // 1. Create Firebase Auth user if not already signed in as this email
     if (!currentUser || currentUser.isAnonymous || currentUser.email !== email) {
       const userCredential = await createUserWithEmailAndPassword(
-        auth,
+        firebaseAuth,
         email,
         password,
       );
@@ -94,8 +112,9 @@ export function AuthProvider({ children }) {
 
   // Leader Login
   const loginLeader = async (email, password) => {
+    const { auth: firebaseAuth } = await initializeFirebase();
     const userCredential = await signInWithEmailAndPassword(
-      auth,
+      firebaseAuth,
       email,
       password,
     );
@@ -107,11 +126,12 @@ export function AuthProvider({ children }) {
 
   // Anonymous Member Join: Creates or reuses anonymous Firebase session + joins team
   const joinAsMember = async (joinCode, playerName) => {
-    let currentUser = auth.currentUser;
+    const { auth: firebaseAuth } = await initializeFirebase();
+    let currentUser = firebaseAuth.currentUser;
 
     // Create anonymous session if not already logged in
     if (!currentUser) {
-      const userCredential = await signInAnonymously(auth);
+      const userCredential = await signInAnonymously(firebaseAuth);
       currentUser = userCredential.user;
     }
 
@@ -134,14 +154,17 @@ export function AuthProvider({ children }) {
 
   // Sign out handler
   const logout = async () => {
-    await signOut(auth);
+    const { auth: firebaseAuth } = await initializeFirebase();
+    await signOut(firebaseAuth);
     setUser(null);
     setTeam(null);
   };
 
   const getIdToken = async () => {
-    if (!auth.currentUser) return null;
-    return auth.currentUser.getIdToken();
+    const { auth: firebaseAuth } = await initializeFirebase();
+    const activeUser = firebaseAuth?.currentUser || auth?.currentUser;
+    if (!activeUser) return null;
+    return activeUser.getIdToken();
   };
 
   const isLeader = Boolean(

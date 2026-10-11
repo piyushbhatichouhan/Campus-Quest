@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { gameApi } from "../services/gameApi";
 import { getFriendlyErrorMessage } from "../utils/authErrors";
 import "./Auth.css";
 
@@ -20,6 +21,24 @@ function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [eventStatus, setEventStatus] = useState("waiting");
+
+  useEffect(() => {
+    let active = true;
+    gameApi
+      .getEventStatus()
+      .then((res) => {
+        if (active && res?.status) {
+          setEventStatus(res.status);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const registrationClosed = eventStatus !== "waiting";
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -34,6 +53,13 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
+
+    if (registrationClosed) {
+      setErrorMsg(
+        "Team registration is closed because the Campus Quest event has already started.",
+      );
+      return;
+    }
 
     if (!form.teamName.trim() || form.teamName.trim().length < 2) {
       setErrorMsg("Please choose a team name (at least 2 characters).");
@@ -67,7 +93,7 @@ function Register() {
       navigate("/lobby");
     } catch (err) {
       setErrorMsg(
-        err.message?.includes("team")
+        err.message?.includes("team") || err.message?.includes("closed")
           ? err.message
           : getFriendlyErrorMessage(err),
       );
@@ -109,6 +135,14 @@ function Register() {
             Register as Team Leader and invite up to 3 teammates.
           </p>
 
+          {registrationClosed && (
+            <div className="auth-error-banner" role="status">
+              🔒 REGISTRATION CLOSED: The Campus Quest event is currently{" "}
+              {eventStatus.toUpperCase()}. New teams can only register while the
+              event is in WAITING state.
+            </div>
+          )}
+
           {errorMsg && (
             <div className="auth-error-banner" role="alert">
               {errorMsg}
@@ -129,7 +163,7 @@ function Register() {
                 minLength={2}
                 maxLength={30}
                 autoComplete="organization"
-                disabled={submitting}
+                disabled={submitting || registrationClosed}
               />
               <span className="field-hint">
                 This name will appear on the campus leaderboard.
@@ -149,7 +183,7 @@ function Register() {
                 minLength={2}
                 maxLength={30}
                 autoComplete="name"
-                disabled={submitting}
+                disabled={submitting || registrationClosed}
               />
               <span className="field-hint">
                 You will lead the team and manage the lobby.
@@ -167,7 +201,7 @@ function Register() {
                 onChange={handleChange}
                 required
                 autoComplete="email"
-                disabled={submitting}
+                disabled={submitting || registrationClosed}
               />
             </div>
 
@@ -184,7 +218,7 @@ function Register() {
                   required
                   minLength={6}
                   autoComplete="new-password"
-                  disabled={submitting}
+                  disabled={submitting || registrationClosed}
                 />
                 <button
                   type="button"
@@ -208,7 +242,7 @@ function Register() {
                   onChange={handleChange}
                   required
                   autoComplete="new-password"
-                  disabled={submitting}
+                  disabled={submitting || registrationClosed}
                 />
                 <button
                   type="button"
@@ -223,9 +257,15 @@ function Register() {
             <button
               type="submit"
               className="pixel-button primary"
-              disabled={submitting}
+              disabled={submitting || registrationClosed}
             >
-              <span>{submitting ? "INITIALIZING TEAM..." : "CREATE & ENTER LOBBY"}</span>
+              <span>
+                {registrationClosed
+                  ? "REGISTRATION CLOSED"
+                  : submitting
+                    ? "INITIALIZING TEAM..."
+                    : "CREATE & ENTER LOBBY"}
+              </span>
               <span className="button-arrow">▶</span>
             </button>
           </form>
@@ -246,9 +286,15 @@ function Register() {
             <span />
           </div>
 
-          <Link to="/login" className="pixel-button secondary">
+          <Link to="/login" className="pixel-button secondary" style={{ marginBottom: user ? "8px" : "0" }}>
             RETURN TO LOGIN
           </Link>
+
+          {user && !user.isAnonymous && (
+            <Link to="/admin" className="pixel-button secondary">
+              OPEN ADMIN DASHBOARD
+            </Link>
+          )}
         </div>
 
         <p className="auth-footer">

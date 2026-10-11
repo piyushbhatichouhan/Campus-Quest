@@ -30,12 +30,6 @@ function Profile() {
   }, []);
 
   const handleLogout = async () => {
-    if (user?.isAnonymous) {
-      const confirmed = window.confirm(
-        "Warning: You are currently signed in as an anonymous team member. Signing out may prevent you from recovering your session. Do you want to sign out?",
-      );
-      if (!confirmed) return;
-    }
     try {
       await logout();
       navigate(user?.isAnonymous ? "/join" : "/login");
@@ -47,7 +41,11 @@ function Profile() {
   const displayName = user?.displayName || gameState?.displayName || "Explorer";
   const teamName = gameState?.teamName || "Campus Squad";
   const role = gameState?.role === "leader" ? "Leader" : "Member";
-  const email = user?.email || (user?.isAnonymous ? "Anonymous Member" : "");
+  const email =
+    user?.email ||
+    (user?.isAnonymous
+      ? `Anonymous ${role} • ${teamName}`
+      : `${role} • ${teamName}`);
   const avatarLetter = displayName.charAt(0).toUpperCase() || "P";
   const score = gameState?.score || 0;
   const completedCount = (gameState?.completedCheckpoints || []).length;

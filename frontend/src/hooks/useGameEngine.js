@@ -10,6 +10,7 @@ function useGameEngine(location) {
   const [loadingGame, setLoadingGame] = useState(true);
   const [apiError, setApiError] = useState("");
   const [challengeResults, setChallengeResults] = useState({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const refreshState = useCallback(async () => {
     if (!user) return null;
@@ -62,17 +63,17 @@ function useGameEngine(location) {
 
     initializeGame();
 
-    // Background polling for team state synchronization across devices
+    // Background polling every 3.5s for event-wide & team state synchronization
     let pollInterval = null;
     const scheduleStatePoll = () => {
       if (cancelled) return;
       if (document.visibilityState === "visible") {
         refreshState();
       }
-      pollInterval = window.setTimeout(scheduleStatePoll, 4000);
+      pollInterval = window.setTimeout(scheduleStatePoll, 3500);
     };
 
-    pollInterval = window.setTimeout(scheduleStatePoll, 4000);
+    pollInterval = window.setTimeout(scheduleStatePoll, 3500);
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -88,6 +89,41 @@ function useGameEngine(location) {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [user, refreshState]);
+
+  const eventStatus =
+    serverState?.eventStatus || serverState?.status || "active";
+  const eventStartedAt =
+    serverState?.eventStartedAt || serverState?.startedAt || null;
+  const eventStoppedAt = serverState?.eventStoppedAt || null;
+  const eventFinalizedAt = serverState?.eventFinalizedAt || null;
+
+  // Tick every second while event is active so elapsed competition timer updates smoothly
+  useEffect(() => {
+    if (eventStatus !== "active") return undefined;
+    const id = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [eventStatus]);
+
+  const elapsedSeconds = useMemo(() => {
+    if (!eventStartedAt) return 0;
+    const startMs = Date.parse(eventStartedAt);
+    if (Number.isNaN(startMs)) return 0;
+
+    let endMs = nowMs;
+    if (
+      (eventStatus === "stopped" || eventStatus === "completed") &&
+      eventStoppedAt
+    ) {
+      const stopMs = Date.parse(eventStoppedAt);
+      if (!Number.isNaN(stopMs)) {
+        endMs = stopMs;
+      }
+    }
+
+    return Math.max(0, Math.floor((endMs - startMs) / 1000));
+  }, [eventStartedAt, eventStoppedAt, eventStatus, nowMs]);
 
   const currentCheckpointIndex = serverState?.gameCompleted
     ? checkpoints.length
@@ -107,6 +143,8 @@ function useGameEngine(location) {
   const memberCount = serverState?.memberCount || 1;
   const maxMembers = serverState?.maxMembers || 4;
   const teamStatus = serverState?.status || "active";
+  const currentClue = serverState?.currentClue || null;
+  const completedJourney = serverState?.completedJourney || [];
   const level = Math.floor(score / 250) + 1;
   const nextLevelXP = level * 250;
 
@@ -122,7 +160,11 @@ function useGameEngine(location) {
 
       if (completedList.includes(checkpoint.id)) {
         status = "COMPLETED";
-      } else if (!gameCompleted && index === safeIndex) {
+      } else if (
+        eventStatus !== "waiting" &&
+        !gameCompleted &&
+        index === safeIndex
+      ) {
         status =
           claimedCheckpointId === checkpoint.id
             ? "CHALLENGE"
@@ -142,6 +184,7 @@ function useGameEngine(location) {
     checkpoints,
     location,
     completedCheckpoints,
+    eventStatus,
     gameCompleted,
     safeIndex,
     claimedCheckpointId,
@@ -153,6 +196,11 @@ function useGameEngine(location) {
     ) || null;
 
   async function claimCheckpoint(checkpointId) {
+    if (eventStatus !== "active") {
+      setApiError("The event has ended. Checkpoint claims are disabled.");
+      return false;
+    }
+
     const checkpoint = checkpoints.find((item) => item.id === checkpointId);
 
     if (
@@ -188,11 +236,19 @@ function useGameEngine(location) {
       return true;
     } catch (error) {
       setApiError(error.message);
+      await refreshState();
       return false;
     }
   }
 
   async function submitChallenge(checkpointId, answer) {
+    if (eventStatus !== "active") {
+      return {
+        success: false,
+        reason: "The event has ended. Challenge submissions are disabled.",
+      };
+    }
+
     if (claimedCheckpointId !== checkpointId) {
       return {
         success: false,
@@ -227,9 +283,11 @@ function useGameEngine(location) {
       return {
         success: true,
         points: result.pointsAwarded,
+        rewardItem: result.rewardItem,
       };
     } catch (error) {
       setApiError(error.message);
+      await refreshState();
 
       return {
         success: false,
@@ -244,12 +302,19 @@ function useGameEngine(location) {
     currentCheckpointIndex: safeIndex,
     claimedCheckpoints: claimedCheckpointId ? [claimedCheckpointId] : [],
     completedCheckpoints: completedCheckpoints || [],
+    completedJourney,
+    currentClue,
     challengeResults,
     score,
     teamName,
     memberCount,
     maxMembers,
     teamStatus,
+    eventStatus,
+    eventStartedAt,
+    eventStoppedAt,
+    eventFinalizedAt,
+    elapsedSeconds,
     inventory,
     rank,
     level,

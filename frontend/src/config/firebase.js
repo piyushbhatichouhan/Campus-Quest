@@ -1,14 +1,37 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getConfig } from "../config";
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
+export let app = null;
+export let auth = null;
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+let firebaseInitPromise = null;
+
+export async function initializeFirebase() {
+  if (app && auth) {
+    return { app, auth };
+  }
+
+  if (!firebaseInitPromise) {
+    firebaseInitPromise = (async () => {
+      const config = await getConfig();
+      const firebaseConfig = config.firebaseConfig || {
+        apiKey: config.apiKey,
+        authDomain: config.authDomain,
+        projectId: config.projectId,
+        storageBucket: config.storageBucket,
+        messagingSenderId: config.messagingSenderId,
+        appId: config.appId,
+      };
+
+      app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      return { app, auth };
+    })().catch((err) => {
+      firebaseInitPromise = null;
+      throw err;
+    });
+  }
+
+  return firebaseInitPromise;
+}

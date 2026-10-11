@@ -147,13 +147,14 @@ async function getGameState(uid) {
       const team = teamSnap.data();
       const index = team.currentCheckpointIndex || 0;
 
-      // Calculate dynamic team rank
+      // Calculate dynamic team rank from authoritative leaderboard
       let rank = 1;
       try {
-        const higherTeams = await teams
-          .where("score", ">", team.score || 0)
-          .get();
-        rank = higherTeams.size + 1;
+        const lb = await getLeaderboard(uid);
+        const myEntry = lb.find((item) => item.teamId === (team.id || playerData.teamId));
+        if (myEntry) {
+          rank = myEntry.rank;
+        }
       } catch (err) {
         // Fallback
       }
@@ -162,6 +163,28 @@ async function getGameState(uid) {
       const currentCheckpoint = isEventWaiting
         ? null
         : getCheckpointState(index);
+
+      const currentClue = isEventWaiting || index >= checkpoints.length
+        ? null
+        : index === 0
+          ? checkpoints[0]?.challenge?.question || null
+          : checkpoints[index - 1]?.nextClue || checkpoints[index]?.challenge?.question || null;
+
+      const completedIds = team.completedCheckpoints || [];
+      const checkpointProgress = team.checkpointProgress || {};
+      const completedJourney = checkpoints
+        .filter((cp) => completedIds.includes(cp.id))
+        .map((cp) => {
+          const prog = checkpointProgress[cp.id] || {};
+          return {
+            id: cp.id,
+            order: cp.order,
+            name: cp.name,
+            points: cp.points,
+            claimedAt: prog.claimedAt?.toDate ? prog.claimedAt.toDate().toISOString() : prog.claimedAt || null,
+            completedAt: prog.completedAt?.toDate ? prog.completedAt.toDate().toISOString() : prog.completedAt || null,
+          };
+        });
 
       return {
         uid,
@@ -174,10 +197,16 @@ async function getGameState(uid) {
         status: isEventWaiting ? "waiting" : isEventStoppedOrDone ? eventData.status : team.status,
         eventStatus: eventData.status,
         eventStartedAt: eventData.startedAt?.toDate ? eventData.startedAt.toDate().toISOString() : eventData.startedAt,
+        eventStoppedAt: eventData.stoppedAt?.toDate ? eventData.stoppedAt.toDate().toISOString() : eventData.stoppedAt || null,
+        eventFinalizedAt: eventData.finalizedAt?.toDate ? eventData.finalizedAt.toDate().toISOString() : eventData.finalizedAt || null,
         score: team.score || 0,
-        completedCheckpoints: team.completedCheckpoints || [],
+        completedCheckpoints: completedIds,
+        completedJourney,
         claimedCheckpointId: isEventWaiting ? null : (team.claimedCheckpointId || null),
-        currentCheckpoint,
+        currentCheckpoint: currentCheckpoint
+          ? { ...currentCheckpoint, mysteryClue: currentClue }
+          : null,
+        currentClue,
         currentCheckpointIndex: index,
         gameCompleted: index >= checkpoints.length,
         inventory: team.inventory || [],
@@ -195,12 +224,16 @@ async function getGameState(uid) {
     completedCheckpoints: playerData.completedCheckpoints || [],
     claimedCheckpointId: null,
     currentCheckpoint: null,
+    currentClue: null,
     currentCheckpointIndex: 0,
     gameCompleted: false,
     inventory: [],
     rank: 1,
     needsTeam: true,
     eventStatus: eventData.status,
+    eventStartedAt: eventData.startedAt?.toDate ? eventData.startedAt.toDate().toISOString() : eventData.startedAt,
+    eventStoppedAt: eventData.stoppedAt?.toDate ? eventData.stoppedAt.toDate().toISOString() : eventData.stoppedAt || null,
+    eventFinalizedAt: eventData.finalizedAt?.toDate ? eventData.finalizedAt.toDate().toISOString() : eventData.finalizedAt || null,
   };
 }
 
@@ -276,10 +309,10 @@ async function claimCheckpoint(uid, checkpointId, latitude, longitude) {
 
     const now = new Date();
 
-    // Track checkpoint arrival analytics
-    const checkpointProgress = team.checkpointProgress || {};
+    // Track checkpoint arrival analytics (preserve original claim timestamp if already set)
+    const checkpointProgress = { ...(team.checkpointProgress || {}) };
     checkpointProgress[sanitizedCheckpointId] = {
-      claimedAt: now,
+      claimedAt: checkpointProgress[sanitizedCheckpointId]?.claimedAt || now,
       completedAt: checkpointProgress[sanitizedCheckpointId]?.completedAt || null,
     };
 
@@ -391,7 +424,7 @@ async function submitChallenge(uid, checkpointId, answer) {
     const isAdventureCompleted = nextIndex >= checkpoints.length;
 
     // Track checkpoint arrival analytics
-    const checkpointProgress = team.checkpointProgress || {};
+    const checkpointProgress = { ...(team.checkpointProgress || {}) };
     checkpointProgress[sanitizedCheckpointId] = {
       claimedAt: checkpointProgress[sanitizedCheckpointId]?.claimedAt || now,
       completedAt: now,
@@ -404,6 +437,7 @@ async function submitChallenge(uid, checkpointId, answer) {
       claimedCheckpointId: null,
       inventory,
       checkpointProgress,
+      lastCheckpointCompletedAt: now,
       lastScoreUpdatedAt: now,
       updatedAt: now,
       ...(isAdventureCompleted
@@ -444,7 +478,7 @@ async function submitChallenge(uid, checkpointId, answer) {
         type: "checkpoint_unlocked",
         checkpointId: nextCheckpoint.id,
         checkpointName: nextCheckpoint.name,
-        message: `New checkpoint unlocked: ${nextCheckpoint.name}!`,
+        message: `New mystery clue unlocked!`,
         createdAt: new Date(now.getTime() + 10),
       });
     }
@@ -473,6 +507,15 @@ function formatTime(timestamp) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function toTimestampMillis(ts) {
+  if (!ts) return null;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.toDate === "function") return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  const parsed = new Date(ts).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 /**
@@ -507,20 +550,31 @@ async function getLeaderboard(currentUid = null) {
 
   let teamList = snapshot.docs.map((doc) => {
     const data = doc.data();
-    const completedCount = (data.completedCheckpoints || []).length;
+    const completedIds = data.completedCheckpoints || [];
+    const completedCount = completedIds.length;
     const isCompleted = completedCount >= checkpoints.length || Boolean(data.completedAt);
 
-    const completedAtMillis = data.completedAt?.toMillis
-      ? data.completedAt.toMillis()
-      : data.completedAt
-        ? new Date(data.completedAt).getTime()
-        : null;
+    // Derive latest checkpoint completion timestamp from explicit field, checkpointProgress, or lastScoreUpdatedAt
+    let latestCpMillis = toTimestampMillis(data.lastCheckpointCompletedAt);
+    if (latestCpMillis == null && data.checkpointProgress && completedIds.length > 0) {
+      const lastId = completedIds[completedIds.length - 1];
+      latestCpMillis = toTimestampMillis(data.checkpointProgress[lastId]?.completedAt);
+    }
+    if (latestCpMillis == null && completedCount > 0) {
+      latestCpMillis = toTimestampMillis(data.lastScoreUpdatedAt);
+    }
 
-    const lastScoreMillis = data.lastScoreUpdatedAt?.toMillis
-      ? data.lastScoreUpdatedAt.toMillis()
-      : data.createdAt?.toMillis
-        ? data.createdAt.toMillis()
-        : 0;
+    const completedAtMillis =
+      toTimestampMillis(data.completedAt) ??
+      (isCompleted ? latestCpMillis : null);
+
+    const completedAtIso = data.completedAt?.toDate
+      ? data.completedAt.toDate().toISOString()
+      : typeof data.completedAt === "string"
+        ? data.completedAt
+        : completedAtMillis
+          ? new Date(completedAtMillis).toISOString()
+          : null;
 
     return {
       teamId: doc.id,
@@ -532,9 +586,12 @@ async function getLeaderboard(currentUid = null) {
       progress: `${completedCount}/${checkpoints.length}`,
       memberCount: data.memberCount || 1,
       isCompleted,
+      completedAt: completedAtIso,
       completedAtMillis,
-      finishedAt: isCompleted ? formatTime(data.completedAt || data.lastScoreUpdatedAt) : "—",
-      lastScoreUpdatedAtMillis: lastScoreMillis,
+      finishedAt: isCompleted
+        ? formatTime(data.completedAt || (completedAtMillis ? new Date(completedAtMillis) : data.lastScoreUpdatedAt)) || "—"
+        : "—",
+      lastScoreUpdatedAtMillis: latestCpMillis ?? Number.MAX_SAFE_INTEGER,
       isCurrentTeam: currentTeamId ? doc.id === currentTeamId : false,
       isCurrentUser: currentTeamId ? doc.id === currentTeamId : false,
     };
@@ -556,9 +613,10 @@ async function getLeaderboard(currentUid = null) {
         progress: `${completedCount}/${checkpoints.length}`,
         memberCount: 1,
         isCompleted: completedCount >= checkpoints.length,
+        completedAt: null,
         completedAtMillis: null,
         finishedAt: "—",
-        lastScoreUpdatedAtMillis: data.updatedAt?.toMillis?.() || 0,
+        lastScoreUpdatedAtMillis: toTimestampMillis(data.updatedAt) ?? Number.MAX_SAFE_INTEGER,
         isCurrentTeam: currentUid ? doc.id === currentUid : false,
         isCurrentUser: currentUid ? doc.id === currentUid : false,
       };
@@ -573,8 +631,8 @@ async function getLeaderboard(currentUid = null) {
 
     // 2. Completed teams rank by earliest official completion timestamp
     if (a.isCompleted && b.isCompleted) {
-      const aTime = a.completedAtMillis || 0;
-      const bTime = b.completedAtMillis || 0;
+      const aTime = a.completedAtMillis ?? Number.MAX_SAFE_INTEGER;
+      const bTime = b.completedAtMillis ?? Number.MAX_SAFE_INTEGER;
       if (aTime !== bTime) {
         return aTime - bTime; // earliest first
       }
@@ -586,7 +644,7 @@ async function getLeaderboard(currentUid = null) {
     }
 
     // 4. If tied, team that completed most recent checkpoint earlier ranks higher
-    if (a.lastScoreUpdatedAtMillis !== b.lastScoreUpdatedAtMillis) {
+    if (a.completedCount > 0 && a.lastScoreUpdatedAtMillis !== b.lastScoreUpdatedAtMillis) {
       return a.lastScoreUpdatedAtMillis - b.lastScoreUpdatedAtMillis; // earlier timestamp first
     }
 
@@ -596,7 +654,7 @@ async function getLeaderboard(currentUid = null) {
     }
 
     // 6. Stable team ID tie-breaker
-    return a.teamId.localeCompare(b.teamId);
+    return String(a.teamId).localeCompare(String(b.teamId));
   });
 
   // Assign ranks

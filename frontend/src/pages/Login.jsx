@@ -16,6 +16,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loginAsAdmin, setLoginAsAdmin] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -40,12 +41,16 @@ function Login() {
 
     try {
       const result = await loginLeader(form.email.trim(), form.password);
+      if (loginAsAdmin) {
+        navigate("/admin");
+        return;
+      }
+
       const team = result.team;
 
       if (!team || !team.hasTeam) {
-        // Leader has account but needs to set up a team
         navigate("/register");
-      } else if (team.status === "waiting") {
+      } else if ((team.eventStatus || team.status) === "waiting") {
         navigate("/lobby");
       } else {
         navigate("/game");
@@ -75,19 +80,21 @@ function Login() {
 
           <div>
             <h1>CAMPUS QUEST</h1>
-            <p>Leader Login</p>
+            <p>{loginAsAdmin ? "Administrator Login" : "Leader Login"}</p>
           </div>
         </div>
 
         <div className="auth-card">
           <div className="card-top">
             <span className="pixel-diamond">◆</span>
-            <h2>LEADER LOGIN</h2>
+            <h2>{loginAsAdmin ? "ADMIN CONSOLE LOGIN" : "LEADER LOGIN"}</h2>
             <span className="pixel-diamond">◆</span>
           </div>
 
           <p className="auth-subtitle">
-            Log in to manage your team or continue your adventure.
+            {loginAsAdmin
+              ? "Sign in with an authorized administrator account to control the Campus Quest event."
+              : "Log in to manage your team or continue your adventure."}
           </p>
 
           {errorMsg && (
@@ -98,13 +105,17 @@ function Login() {
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-field">
-              <label htmlFor="email">LEADER EMAIL</label>
+              <label htmlFor="email">
+                {loginAsAdmin ? "ADMIN EMAIL" : "LEADER EMAIL"}
+              </label>
 
               <input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="leader@example.com"
+                placeholder={
+                  loginAsAdmin ? "admin@example.com" : "leader@example.com"
+                }
                 value={form.email}
                 onChange={handleChange}
                 required
@@ -145,7 +156,13 @@ function Login() {
               className="pixel-button primary"
               disabled={submitting}
             >
-              <span>{submitting ? "VERIFYING..." : "ENTER WORLD"}</span>
+              <span>
+                {submitting
+                  ? "VERIFYING..."
+                  : loginAsAdmin
+                    ? "OPEN ADMIN DASHBOARD"
+                    : "ENTER WORLD"}
+              </span>
               <span className="button-arrow">▶</span>
             </button>
           </form>
@@ -166,9 +183,17 @@ function Login() {
             <span />
           </div>
 
-          <Link to="/register" className="pixel-button secondary">
+          <Link to="/register" className="pixel-button secondary" style={{ marginBottom: "8px" }}>
             CREATE NEW TEAM
           </Link>
+
+          <button
+            type="button"
+            className="pixel-button secondary"
+            onClick={() => setLoginAsAdmin((prev) => !prev)}
+          >
+            {loginAsAdmin ? "SWITCH TO LEADER LOGIN" : "ADMIN CONSOLE MODE"}
+          </button>
         </div>
 
         <p className="auth-footer">

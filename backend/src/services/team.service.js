@@ -113,6 +113,15 @@ async function createTeam(user, { teamName, leaderName }) {
 
     try {
       await db.runTransaction(async (transaction) => {
+        const { eventData: txEvent } = await getOrCreateEventDoc(transaction);
+        if (txEvent.status !== "waiting") {
+          throw new TeamError(
+            `Team registration is closed because the event is currently '${txEvent.status}'.`,
+            403,
+            "REGISTRATION_CLOSED",
+          );
+        }
+
         const codeDoc = await transaction.get(codeRef);
         if (codeDoc.exists) {
           throw new Error("COLLISION");
@@ -298,6 +307,15 @@ async function joinTeam(user, { joinCode, displayName }) {
   const memberRef = teamRef.collection("members").doc(uid);
 
   await db.runTransaction(async (transaction) => {
+    const { eventData: txEvent } = await getOrCreateEventDoc(transaction);
+    if (txEvent.status !== "waiting") {
+      throw new TeamError(
+        `Team joining is closed because the event is currently '${txEvent.status}'.`,
+        403,
+        "JOINING_CLOSED",
+      );
+    }
+
     const [teamSnap, memberSnap, playerSnap] = await Promise.all([
       transaction.get(teamRef),
       transaction.get(memberRef),
@@ -426,15 +444,32 @@ async function getMyTeam(uid) {
   const currentCheckpointIndex = team.currentCheckpointIndex || 0;
   const { eventData: currentEvent } = await getOrCreateEventDoc();
 
+  const effectiveStatus =
+    currentEvent.status === "waiting"
+      ? "waiting"
+      : currentEvent.status === "active"
+        ? team.status === "completed"
+          ? "completed"
+          : "active"
+        : currentEvent.status;
+
   return {
     hasTeam: true,
     teamId: team.id || playerData.teamId,
     name: team.name,
     joinCode: team.joinCode,
     leaderUid: team.leaderUid,
-    status: currentEvent.status === "active" ? "active" : team.status,
+    status: effectiveStatus,
     eventStatus: currentEvent.status,
-    eventStartedAt: currentEvent.startedAt?.toDate ? currentEvent.startedAt.toDate().toISOString() : currentEvent.startedAt,
+    eventStartedAt: currentEvent.startedAt?.toDate
+      ? currentEvent.startedAt.toDate().toISOString()
+      : currentEvent.startedAt,
+    eventStoppedAt: currentEvent.stoppedAt?.toDate
+      ? currentEvent.stoppedAt.toDate().toISOString()
+      : currentEvent.stoppedAt || null,
+    eventFinalizedAt: currentEvent.finalizedAt?.toDate
+      ? currentEvent.finalizedAt.toDate().toISOString()
+      : currentEvent.finalizedAt || null,
     memberCount: members.length,
     maxMembers: team.maxMembers || 4,
     role: isLeader ? "leader" : playerData.role || "member",
@@ -444,7 +479,8 @@ async function getMyTeam(uid) {
     gameState: {
       score: team.score || 0,
       currentCheckpointIndex,
-      claimedCheckpointId: team.claimedCheckpointId || null,
+      claimedCheckpointId:
+        currentEvent.status === "waiting" ? null : team.claimedCheckpointId || null,
       completedCheckpoints: team.completedCheckpoints || [],
       gameCompleted: currentCheckpointIndex >= checkpoints.length,
     },
@@ -481,6 +517,15 @@ async function leaveTeam(user) {
   const memberRef = teamRef.collection("members").doc(uid);
 
   return db.runTransaction(async (transaction) => {
+    const { eventData: txEvent } = await getOrCreateEventDoc(transaction);
+    if (txEvent.status !== "waiting") {
+      throw new TeamError(
+        "Cannot leave the team once the adventure has started. Team rosters are locked.",
+        400,
+        "CANNOT_LEAVE_ACTIVE_GAME",
+      );
+    }
+
     const teamSnap = await transaction.get(teamRef);
     if (!teamSnap.exists) {
       transaction.delete(playerRef);
@@ -562,6 +607,15 @@ async function removeMember(user, targetUid) {
   const targetPlayerRef = playersCollection.doc(targetUid);
 
   return db.runTransaction(async (transaction) => {
+    const { eventData: txEvent } = await getOrCreateEventDoc(transaction);
+    if (txEvent.status !== "waiting") {
+      throw new TeamError(
+        "Cannot remove members once the adventure has begun. Team rosters are locked.",
+        400,
+        "GAME_ACTIVE",
+      );
+    }
+
     const [teamSnap, memberSnap] = await Promise.all([
       transaction.get(teamRef),
       transaction.get(targetMemberRef),

@@ -1,9 +1,17 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import { MapPin, LockKeyhole, CheckCircle2, Trophy, X } from "lucide-react";
 
 import "./QuestCard.css";
 
-function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
+function QuestCard({
+  checkpoint,
+  eventStatus = "active",
+  currentClue = null,
+  onClaim,
+  onSubmitChallenge,
+  onClose,
+}) {
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -18,11 +26,25 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
     return null;
   }
 
-  const { status, name, distance, points, discoveryText, challenge, nextClue } =
-    checkpoint;
+  const {
+    status,
+    name,
+    order,
+    distance,
+    points,
+    discoveryText,
+    challenge,
+    nextClue,
+  } = checkpoint;
+
+  const isEventActive = eventStatus === "active";
+  const isMystery = status === "REVEALED";
+  const displayName = isMystery
+    ? `Mystery Checkpoint #${order || 1}`
+    : name;
 
   async function handleClaim() {
-    if (submitting) return;
+    if (submitting || !isEventActive) return;
 
     setSubmitting(true);
     setFeedback(null);
@@ -33,7 +55,9 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
       if (!success) {
         setFeedback({
           type: "error",
-          message: "You must be inside the checkpoint area to claim it.",
+          message: isEventActive
+            ? "You must be inside the checkpoint area to claim it."
+            : "The event has ended. Checkpoint claims are disabled.",
         });
         return;
       }
@@ -50,6 +74,14 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
   }
 
   async function handleSubmit() {
+    if (!isEventActive) {
+      setFeedback({
+        type: "error",
+        message: "The event has ended. Challenge submissions are disabled.",
+      });
+      return;
+    }
+
     if (!answer.trim()) {
       setFeedback({
         type: "error",
@@ -91,7 +123,7 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
   }
 
   function handleOptionSelect(option) {
-    if (submitting) return;
+    if (submitting || !isEventActive) return;
     setAnswer(option);
     setFeedback(null);
   }
@@ -108,7 +140,7 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
                 ? "CHECKPOINT DISCOVERED"
                 : status === "COMPLETED"
                   ? "COMPLETED"
-                  : "CURRENT OBJECTIVE"}
+                  : "MYSTERY OBJECTIVE"}
           </span>
         </div>
 
@@ -132,9 +164,9 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
         </div>
 
         <div>
-          <h2 className="quest-card-title">{name}</h2>
+          <h2 className="quest-card-title">{displayName}</h2>
 
-          {distance != null && (
+          {!isMystery && distance != null && (
             <div className="quest-card-distance">
               {Math.round(distance)} m away
             </div>
@@ -149,9 +181,10 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
           </div>
 
           <div className="quest-discovery-text">
-            <strong>Find this checkpoint</strong>
+            <strong>Follow the Mystery Clue</strong>
             <span>
-              Travel to the marked location and enter its discovery zone.
+              {currentClue ||
+                "Solve the clue and physically enter the checkpoint zone to reveal this location."}
             </span>
           </div>
         </div>
@@ -171,10 +204,14 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
           <button
             className="quest-card-action"
             onClick={handleClaim}
-            disabled={submitting}
+            disabled={submitting || !isEventActive}
             type="button"
           >
-            {submitting ? "CLAIMING..." : "CLAIM CHECKPOINT"}
+            {!isEventActive
+              ? "EVENT ENDED — CLAIM DISABLED"
+              : submitting
+                ? "CLAIMING..."
+                : "CLAIM CHECKPOINT"}
           </button>
         </>
       )}
@@ -196,7 +233,7 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
                       answer === option ? "selected" : ""
                     }`}
                     onClick={() => handleOptionSelect(option)}
-                    disabled={submitting}
+                    disabled={submitting || !isEventActive}
                     type="button"
                   >
                     {option}
@@ -215,13 +252,13 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
                   setFeedback(null);
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !submitting) {
+                  if (event.key === "Enter" && !submitting && isEventActive) {
                     handleSubmit();
                   }
                 }}
                 placeholder="Enter your answer..."
                 autoComplete="off"
-                disabled={submitting}
+                disabled={submitting || !isEventActive}
               />
             )}
           </div>
@@ -229,10 +266,14 @@ function QuestCard({ checkpoint, onClaim, onSubmitChallenge, onClose }) {
           <button
             className="quest-card-action"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !isEventActive}
             type="button"
           >
-            {submitting ? "CHECKING ANSWER..." : "SUBMIT ANSWER"}
+            {!isEventActive
+              ? "EVENT ENDED — SUBMISSION DISABLED"
+              : submitting
+                ? "CHECKING ANSWER..."
+                : "SUBMIT ANSWER"}
           </button>
         </>
       )}

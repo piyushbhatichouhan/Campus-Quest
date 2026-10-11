@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -10,9 +11,10 @@ function Lobby() {
 
   const [team, setTeam] = useState(cachedTeam || null);
   const [loading, setLoading] = useState(!cachedTeam);
-  const [starting, setStarting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [copied, setCopied] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmKickUid, setConfirmKickUid] = useState(null);
 
   const isPollingRef = useRef(false);
 
@@ -29,8 +31,14 @@ function Lobby() {
 
       setTeam(data);
 
-      // If game has already started, redirect automatically to game view
-      if (data.status === "active" || data.status === "completed") {
+      const effectiveStatus = data.eventStatus || data.status;
+      // If administrator has started (or stopped/finalized) the event, transition automatically
+      if (
+        effectiveStatus === "active" ||
+        effectiveStatus === "stopped" ||
+        effectiveStatus === "completed"
+      ) {
+        await refreshTeam();
         navigate("/game");
       }
     } catch (err) {
@@ -39,7 +47,7 @@ function Lobby() {
       isPollingRef.current = false;
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, refreshTeam]);
 
   useEffect(() => {
     let timerId = null;
@@ -81,51 +89,30 @@ function Lobby() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const handleStartAdventure = async () => {
-    if (starting) return;
-    setStarting(true);
-    setErrorMsg("");
-
-    try {
-      await gameApi.startAdventure();
-      await refreshTeam();
-      navigate("/game");
-    } catch (err) {
-      setErrorMsg(err.message || "Could not start adventure. Please try again.");
-      setStarting(false);
-    }
-  };
-
-  const handleLeaveTeam = async () => {
+  const executeLeaveTeam = async () => {
     const isAnonymous = user?.isAnonymous;
-    const confirmMessage = isAnonymous
-      ? "Warning: Signing out or leaving as a temporary member may prevent you from rejoining with the same identity. Continue?"
-      : "Are you sure you want to leave this team lobby?";
-
-    if (window.confirm(confirmMessage)) {
-      try {
-        await gameApi.leaveTeam();
-        await refreshTeam();
-        if (isAnonymous) {
-          await logout();
-          navigate("/join");
-        } else {
-          navigate("/register");
-        }
-      } catch (err) {
-        setErrorMsg(err.message || "Failed to leave team.");
+    setConfirmLeave(false);
+    try {
+      await gameApi.leaveTeam();
+      await refreshTeam();
+      if (isAnonymous) {
+        await logout();
+        navigate("/join");
+      } else {
+        navigate("/register");
       }
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to leave team.");
     }
   };
 
-  const handleKickMember = async (targetUid) => {
-    if (!window.confirm("Remove this player from the team?")) return;
+  const executeKickMember = async (targetUid) => {
+    setConfirmKickUid(null);
     try {
       await gameApi.removeMember(targetUid);
       await fetchLobbyState();
@@ -150,6 +137,7 @@ function Lobby() {
   const members = team?.members || [];
   const memberCount = members.length || team?.memberCount || 1;
   const maxMembers = team?.maxMembers || 4;
+  const teamNameUpper = (team?.name || "YOUR SQUAD").toUpperCase();
 
   const emptySlotsCount = Math.max(0, maxMembers - memberCount);
   const emptySlots = Array.from({ length: emptySlotsCount });
@@ -158,10 +146,29 @@ function Lobby() {
     <main className="lobby-page">
       <div className="lobby-container">
         <div className="lobby-card">
-          {/* HEADER */}
+          {/* HEADER SUMMARY */}
           <div className="lobby-header">
-            <span className="lobby-kicker">CAMPUS QUEST LOBBY</span>
-            <h1 className="lobby-team-name">{team?.name || "YOUR SQUAD"}</h1>
+            <span className="lobby-kicker">CAMPUS QUEST</span>
+            <h1 className="lobby-team-name">TEAM: {teamNameUpper}</h1>
+            <div className="lobby-members-summary">
+              MEMBERS: {memberCount}/{maxMembers}
+            </div>
+          </div>
+
+          {/* WAITING FOR THE EVENT TO START BANNER */}
+          <div className="lobby-waiting-hero" role="status" aria-live="polite">
+            <div className="lobby-waiting-badge">
+              <span className="pulse-dot" />
+              <span>WAITING FOR THE EVENT TO START</span>
+            </div>
+            <p className="lobby-waiting-copy">
+              The administrator will begin the adventure.
+              <br />
+              Get ready to explore!
+            </p>
+            <div className="lobby-mystery-locked-note">
+              🔒 FIRST MYSTERY CLUE LOCKED UNTIL OFFICIAL EVENT START
+            </div>
           </div>
 
           {/* JOIN CODE BOX */}
@@ -179,16 +186,7 @@ function Lobby() {
 
           {/* ERROR MESSAGE */}
           {errorMsg && (
-            <div
-              style={{
-                background: "#3b1111",
-                border: "2px solid #e05252",
-                color: "#ff9999",
-                padding: "8px",
-                fontSize: "10px",
-                textAlign: "center",
-              }}
-            >
+            <div className="lobby-error-banner" role="alert">
               {errorMsg}
             </div>
           )}
@@ -224,13 +222,32 @@ function Lobby() {
                     </div>
 
                     {isLeader && !isMemberLeader && (
-                      <button
-                        type="button"
-                        className="lobby-kick-btn"
-                        onClick={() => handleKickMember(member.uid)}
-                      >
-                        REMOVE
-                      </button>
+                      confirmKickUid === member.uid ? (
+                        <div className="lobby-inline-confirm">
+                          <button
+                            type="button"
+                            className="lobby-kick-btn"
+                            onClick={() => executeKickMember(member.uid)}
+                          >
+                            CONFIRM
+                          </button>
+                          <button
+                            type="button"
+                            className="lobby-cancel-mini-btn"
+                            onClick={() => setConfirmKickUid(null)}
+                          >
+                            CANCEL
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="lobby-kick-btn"
+                          onClick={() => setConfirmKickUid(member.uid)}
+                        >
+                          REMOVE
+                        </button>
+                      )
                     )}
                   </div>
                 );
@@ -238,45 +255,46 @@ function Lobby() {
 
               {emptySlots.map((_, index) => (
                 <div key={index} className="lobby-empty-slot">
-                  Waiting for teammate {memberCount + index + 1}...
+                  Waiting for teammate {memberCount + index + 1} (optional)...
                 </div>
               ))}
             </div>
           </section>
 
-          {/* STATUS BANNER */}
-          <div className="lobby-status-banner">
-            <span className="pulse-dot" />
-            <span>
-              {isLeader
-                ? "You can start the adventure whenever your squad is ready."
-                : "Waiting for team leader to start the adventure..."}
-            </span>
-          </div>
-
-          {/* ACTIONS */}
-          {isLeader ? (
+          {/* LEAVE CONFIRMATION OR BUTTON */}
+          {confirmLeave ? (
+            <div className="lobby-confirm-box">
+              <p>
+                {user?.isAnonymous
+                  ? "Leaving as a temporary member may prevent you from rejoining with the same identity. Continue?"
+                  : "Are you sure you want to leave this team lobby?"}
+              </p>
+              <div className="lobby-confirm-actions">
+                <button
+                  type="button"
+                  className="lobby-cancel-mini-btn"
+                  onClick={() => setConfirmLeave(false)}
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  className="lobby-kick-btn"
+                  onClick={executeLeaveTeam}
+                >
+                  CONFIRM LEAVE
+                </button>
+              </div>
+            </div>
+          ) : (
             <button
               type="button"
-              className="lobby-start-btn"
-              onClick={handleStartAdventure}
-              disabled={starting}
+              className="lobby-leave-btn"
+              onClick={() => setConfirmLeave(true)}
             >
-              {starting ? "STARTING ADVENTURE..." : "[ START ADVENTURE ]"}
+              {isLeader ? "DISBAND / LEAVE LOBBY" : "LEAVE SQUAD"}
             </button>
-          ) : (
-            <div style={{ textAlign: "center", fontSize: "9px", color: "#858c93" }}>
-              Only the team leader can start the adventure.
-            </div>
           )}
-
-          <button
-            type="button"
-            className="lobby-leave-btn"
-            onClick={handleLeaveTeam}
-          >
-            {isLeader ? "DISBAND / LEAVE LOBBY" : "LEAVE SQUAD"}
-          </button>
         </div>
       </div>
     </main>

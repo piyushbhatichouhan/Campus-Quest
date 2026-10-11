@@ -1,43 +1,27 @@
-import { auth } from "../config/firebase";
-
-// Support both VITE_API_BASE_URL and VITE_API_URL with automatic /api normalization
-const CONFIG_URL = "https://campus-quest-cqa8.onrender.com/api/config";
-
-let apiBaseUrlPromise;
+import { auth, initializeFirebase } from "../config/firebase";
+import { getConfig, normalizeApiUrl } from "../config";
 
 async function getApiBaseUrl() {
-  if (!apiBaseUrlPromise) {
-    apiBaseUrlPromise = fetch(CONFIG_URL)
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Failed to load API configuration.");
-        }
-
-        const config = await response.json();
-
-        if (!config.apiBaseUrl) {
-          throw new Error("Backend API URL is missing.");
-        }
-
-        const trimmedUrl = config.apiBaseUrl.replace(/\/+$/, "");
-
-        return trimmedUrl.endsWith("/api") ? trimmedUrl : `${trimmedUrl}/api`;
-      })
-      .catch((error) => {
-        apiBaseUrlPromise = null;
-        throw error;
-      });
+  const envUrl =
+    import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL;
+  if (envUrl && String(envUrl).trim()) {
+    return normalizeApiUrl(envUrl);
   }
 
-  return apiBaseUrlPromise;
+  const config = await getConfig();
+  return normalizeApiUrl(config.apiBaseUrl);
 }
 
 async function request(endpoint, options = {}, requiresAuth = true) {
   let token = null;
 
-  if (requiresAuth && auth.currentUser) {
+  if (requiresAuth) {
     try {
-      token = await auth.currentUser.getIdToken();
+      const { auth: firebaseAuth } = await initializeFirebase();
+      const activeUser = firebaseAuth?.currentUser || auth?.currentUser;
+      if (activeUser) {
+        token = await activeUser.getIdToken();
+      }
     } catch (err) {
       console.warn("Could not retrieve ID token:", err.message);
     }
@@ -76,21 +60,32 @@ async function request(endpoint, options = {}, requiresAuth = true) {
   }
 
   if (response.status === 401) {
-    throw new Error(
+    const err = new Error(
       result.error?.message || "Session expired. Please log in again.",
     );
+    err.status = 401;
+    err.code = result.error?.code || "UNAUTHORIZED";
+    throw err;
   }
 
   if (!response.ok || !result.success) {
-    throw new Error(
+    const err = new Error(
       result.error?.message || "Something went wrong. Please try again.",
     );
+    err.status = response.status;
+    err.code = result.error?.code || "API_ERROR";
+    throw err;
   }
 
   return result.data;
 }
 
 export const gameApi = {
+  // Public Event Status
+  getEventStatus() {
+    return request("/event/status", {}, false);
+  },
+
   getCheckpoints() {
     return request("/checkpoints", {}, false);
   },
@@ -148,12 +143,6 @@ export const gameApi = {
     return request("/teams/me");
   },
 
-  startAdventure() {
-    return request("/teams/start", {
-      method: "POST",
-    });
-  },
-
   leaveTeam() {
     return request("/teams/leave", {
       method: "POST",
@@ -168,5 +157,50 @@ export const gameApi = {
 
   getTeamEvents(since = 0) {
     return request(`/teams/events?since=${encodeURIComponent(since)}`);
+  },
+
+  // Administrator Event Control & Analytics APIs
+  getAdminEvent() {
+    return request("/admin/event");
+  },
+
+  adminStartEvent() {
+    return request("/admin/event/start", {
+      method: "POST",
+    });
+  },
+
+  adminStopEvent() {
+    return request("/admin/event/stop", {
+      method: "POST",
+    });
+  },
+
+  adminFinalizeEvent() {
+    return request("/admin/event/finalize", {
+      method: "POST",
+    });
+  },
+
+  getAdminOverview() {
+    return request("/admin/overview");
+  },
+
+  getAdminTeams() {
+    return request("/admin/teams");
+  },
+
+  getAdminTeamDetail(teamId) {
+    return request(`/admin/teams/${encodeURIComponent(teamId)}`);
+  },
+
+  getAdminLeaderboard() {
+    return request("/admin/leaderboard");
+  },
+
+  getCheckpointAnalytics(checkpointId) {
+    return request(
+      `/admin/checkpoints/${encodeURIComponent(checkpointId)}/leaderboard`,
+    );
   },
 };

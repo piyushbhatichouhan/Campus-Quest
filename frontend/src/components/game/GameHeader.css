@@ -103,8 +103,41 @@
 }
 
 /* =========================================================
-   XP
+   EVENT TIMER & XP
    ========================================================= */
+
+.game-timer-display {
+    height: 32px;
+
+    display: flex;
+    align-items: center;
+
+    gap: 5px;
+
+    padding: 0 8px;
+
+    background: #131c24;
+
+    border: 2px solid #111315;
+
+    color: #6ee7a0;
+
+    font-family: "Press Start 2P", monospace;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.game-timer-display.ended {
+    background: #2b1616;
+    color: #ff9999;
+    border-color: #ef4444;
+}
+
+.game-timer-display small {
+    color: #858c93;
+    font-size: 6px;
+    letter-spacing: 0.5px;
+}
 
 .game-xp-display {
     height: 32px;

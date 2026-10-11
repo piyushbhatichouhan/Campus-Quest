@@ -45,6 +45,57 @@
     height: 100%;
 }
 
+.event-ended-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #3b1111;
+    border-bottom: 3px solid #ef4444;
+    color: #ffd6d6;
+    z-index: 1900;
+    flex-shrink: 0;
+}
+
+.event-ended-banner-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.event-ended-banner-text strong {
+    font-family: "Press Start 2P", monospace;
+    font-size: 9px;
+    color: #ff9999;
+}
+
+.event-ended-banner-text span {
+    font-size: 11px;
+    color: #f5f2e8;
+}
+
+.event-ended-banner-btn {
+    background: #f5c542;
+    color: #111315;
+    border: 2px solid #111315;
+    font-family: "Press Start 2P", monospace;
+    font-size: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.game-api-error {
+    background: #3b1111;
+    border-bottom: 2px solid #e05252;
+    color: #ff9999;
+    padding: 8px 12px;
+    font-size: 11px;
+    text-align: center;
+    z-index: 1800;
+}
+
 /* =========================================================
    SMALL PHONES
    ========================================================= */

@@ -18,6 +18,12 @@ function TeamNotification({ notifications = [], onDismiss }) {
         } else if (n.type === "adventure_completed") {
           typeClass = "complete";
           icon = "👑";
+        } else if (n.type === "event_started") {
+          typeClass = "event-start";
+          icon = "🚀";
+        } else if (n.type === "event_stopped") {
+          typeClass = "event-stop";
+          icon = "🛑";
         }
 
         return (

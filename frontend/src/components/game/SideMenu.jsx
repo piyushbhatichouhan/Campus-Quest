@@ -6,6 +6,7 @@ import {
   Backpack,
   Trophy,
   Settings,
+  Shield,
   LogOut,
 } from "lucide-react";
 
@@ -49,7 +50,7 @@ function SideMenu({ isOpen, onClose, onSelectTab }) {
       <aside className={`side-menu ${isOpen ? "open" : ""}`}>
         <div className="side-menu-header">
           <div>
-            <div className="side-menu-title">DAVV QUEST</div>
+            <div className="side-menu-title">CAMPUS QUEST</div>
 
             <div className="side-menu-subtitle">
               {user?.displayName ? `PLAYER: ${user.displayName.toUpperCase()}` : "ADVENTURER MENU"}
@@ -105,6 +106,13 @@ function SideMenu({ isOpen, onClose, onSelectTab }) {
             <Settings size={19} />
             <span>Settings</span>
           </button>
+
+          {!user?.isAnonymous && (
+            <button className="side-menu-item" onClick={() => goTo("/admin")}>
+              <Shield size={19} />
+              <span>Admin Console</span>
+            </button>
+          )}
         </div>
 
         <div className="side-menu-footer">
@@ -113,7 +121,7 @@ function SideMenu({ isOpen, onClose, onSelectTab }) {
             <span>LOG OUT</span>
           </button>
 
-          <div className="side-menu-version">DAVV QUEST • v0.1</div>
+          <div className="side-menu-version">CAMPUS QUEST • v0.2</div>
         </div>
       </aside>
     </>

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { gameApi } from "../services/gameApi";
 import "./Auth.css";
 
 function JoinTeam() {
@@ -14,6 +15,24 @@ function JoinTeam() {
 
   const [errorMsg, setErrorMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [eventStatus, setEventStatus] = useState("waiting");
+
+  useEffect(() => {
+    let active = true;
+    gameApi
+      .getEventStatus()
+      .then((res) => {
+        if (active && res?.status) {
+          setEventStatus(res.status);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const joiningClosed = eventStatus !== "waiting";
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -28,6 +47,13 @@ function JoinTeam() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
+
+    if (joiningClosed) {
+      setErrorMsg(
+        "Team joining is closed because the Campus Quest event has already started.",
+      );
+      return;
+    }
 
     const code = form.joinCode.trim().toUpperCase();
     const name = form.playerName.trim();
@@ -87,6 +113,14 @@ function JoinTeam() {
             Enter the 6-character code provided by your team leader.
           </p>
 
+          {joiningClosed && (
+            <div className="auth-error-banner" role="status">
+              🔒 TEAM JOINING CLOSED: The Campus Quest event is currently{" "}
+              {eventStatus.toUpperCase()}. Team rosters are locked once the
+              event starts.
+            </div>
+          )}
+
           {errorMsg && (
             <div className="auth-error-banner" role="alert">
               {errorMsg}
@@ -107,7 +141,7 @@ function JoinTeam() {
                 required
                 maxLength={6}
                 autoComplete="off"
-                disabled={submitting}
+                disabled={submitting || joiningClosed}
                 style={{
                   textTransform: "uppercase",
                   letterSpacing: "3px",
@@ -136,7 +170,7 @@ function JoinTeam() {
                 minLength={2}
                 maxLength={24}
                 autoComplete="name"
-                disabled={submitting}
+                disabled={submitting || joiningClosed}
               />
 
               <span className="field-hint">
@@ -147,9 +181,15 @@ function JoinTeam() {
             <button
               type="submit"
               className="pixel-button primary"
-              disabled={submitting}
+              disabled={submitting || joiningClosed}
             >
-              <span>{submitting ? "CONNECTING TO SQUAD..." : "JOIN TEAM"}</span>
+              <span>
+                {joiningClosed
+                  ? "ROSTERS LOCKED"
+                  : submitting
+                    ? "CONNECTING TO SQUAD..."
+                    : "JOIN TEAM"}
+              </span>
               <span className="button-arrow">▶</span>
             </button>
           </form>

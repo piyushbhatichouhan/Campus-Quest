@@ -43,9 +43,20 @@ export function useTeamActivity() {
             }
 
             // Play appropriate sound for team notifications
-            if (newEvents.some((e) => e.type === "challenge_completed")) {
+            if (
+              newEvents.some(
+                (e) =>
+                  e.type === "challenge_completed" ||
+                  e.type === "event_started",
+              )
+            ) {
               playSuccessSound();
-            } else if (newEvents.some((e) => e.type === "checkpoint_claimed")) {
+            } else if (
+              newEvents.some(
+                (e) =>
+                  e.type === "checkpoint_claimed" || e.type === "event_stopped",
+              )
+            ) {
               playDiscoverySound();
             }
 
@@ -56,13 +67,15 @@ export function useTeamActivity() {
             newEvents.forEach((e) => {
               window.setTimeout(() => {
                 if (isMounted) {
-                  setNotifications((current) => current.filter((item) => item.id !== e.id));
+                  setNotifications((current) =>
+                    current.filter((item) => item.id !== e.id),
+                  );
                 }
               }, 3800);
             });
           }
         }
-      } catch (err) {
+      } catch {
         // Silently handle polling errors
       } finally {
         isPollingRef.current = false;

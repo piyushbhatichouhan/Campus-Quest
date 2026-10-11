@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 
 function useGeolocation() {
+  const isSupported =
+    typeof navigator !== "undefined" && Boolean(navigator.geolocation);
+
   const [location, setLocation] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(
+    isSupported ? null : "Geolocation is not supported by this browser.",
+  );
+  const [loading, setLoading] = useState(isSupported);
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by this browser.");
-      setLoading(false);
-      return;
+      return undefined;
     }
 
     const watchId = navigator.geolocation.watchPosition(
@@ -23,8 +26,8 @@ function useGeolocation() {
         setError(null);
         setLoading(false);
       },
-      (error) => {
-        setError(error.message);
+      (err) => {
+        setError(err.message);
         setLoading(false);
       },
       {

@@ -48,68 +48,25 @@ function GameMap({
   checkpointStates,
   onCheckpointSelect,
 }) {
+  // Mystery-checkpoint rule: only show checkpoints that have been discovered, claimed, or completed
+  const visibleCheckpoints = (checkpointStates || []).filter(
+    (checkpoint) =>
+      checkpoint.status === "DISCOVERED" ||
+      checkpoint.status === "CHALLENGE" ||
+      checkpoint.status === "COMPLETED",
+  );
+
   return (
     <div className="game-map-wrapper">
-      {/* --------------------------------------------- */}
-      {/* GPS / GAME DEBUG INFORMATION                  */}
-      {/* --------------------------------------------- */}
-
       <div className="gps-debug">
-        {/* GPS loading */}
-
         {loading && <div className="gps-loading">Getting your location...</div>}
-
-        {/* GPS error */}
-
         {error && <div className="gps-error">GPS Error: {error}</div>}
-
-        {/* GPS accuracy */}
-
         {location && (
           <div className="gps-success">
             GPS ±{location.accuracy.toFixed(1)}m
           </div>
         )}
-
-        {/* ------------------------------------------- */}
-        {/* Checkpoint engine debug information         */}
-        {/* ------------------------------------------- */}
-
-        {/* <div className="checkpoint-debug">
-          <strong>CHECKPOINTS</strong>
-
-          {checkpointStates.map((checkpoint) => (
-            <div key={checkpoint.id}>
-              <strong>{checkpoint.name}</strong>
-
-              {" — "}
-
-              {checkpoint.distance !== null
-                ? `${checkpoint.distance.toFixed(1)}m`
-                : "Waiting for GPS"}
-
-              {" — "}
-
-              <span
-                style={{
-                  color:
-                    checkpoint.status === "COMPLETED"
-                      ? "#22c55e"
-                      : checkpoint.status === "AVAILABLE"
-                        ? "#f5c542"
-                        : "#9ca3af",
-                }}
-              >
-                {checkpoint.status}
-              </span>
-            </div>
-          ))}
-        </div> */}
       </div>
-
-      {/* --------------------------------------------- */}
-      {/* LEAFLET MAP                                   */}
-      {/* --------------------------------------------- */}
 
       <MapContainer
         center={[22.6819, 75.8796]}
@@ -117,24 +74,12 @@ function GameMap({
         scrollWheelZoom={true}
         className="game-map"
       >
-        {/* ------------------------------------------- */}
-        {/* OpenStreetMap tiles                         */}
-        {/* ------------------------------------------- */}
-
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* ------------------------------------------- */}
-        {/* Automatically follow the player             */}
-        {/* ------------------------------------------- */}
-
         <RecenterMap location={location} />
-
-        {/* ------------------------------------------- */}
-        {/* PLAYER LOCATION                             */}
-        {/* ------------------------------------------- */}
 
         {location && (
           <>
@@ -153,8 +98,6 @@ function GameMap({
               </Popup>
             </Marker>
 
-            {/* GPS accuracy circle */}
-
             <Circle
               center={[location.latitude, location.longitude]}
               radius={location.accuracy}
@@ -168,66 +111,40 @@ function GameMap({
           </>
         )}
 
-        {/* ------------------------------------------- */}
-        {/* CHECKPOINTS                                 */}
-        {/* ------------------------------------------- */}
+        {visibleCheckpoints.map((checkpoint) => (
+          <Fragment key={checkpoint.id}>
+            <Circle
+              center={[checkpoint.latitude, checkpoint.longitude]}
+              radius={checkpoint.radius}
+              pathOptions={{
+                color:
+                  checkpoint.status === "COMPLETED"
+                    ? "#22c55e"
+                    : checkpoint.status === "CHALLENGE"
+                      ? "#a855f7"
+                      : "#f5c542",
+                fillColor:
+                  checkpoint.status === "COMPLETED"
+                    ? "#22c55e"
+                    : checkpoint.status === "CHALLENGE"
+                      ? "#a855f7"
+                      : "#f5c542",
+                fillOpacity: 0.18,
+                weight: 2,
+              }}
+            />
 
-        {checkpointStates
-          .filter((checkpoint) => checkpoint.status !== "HIDDEN")
-          .map((checkpoint) => (
-            <Fragment key={checkpoint.id}>
-              {/* --------------------------------------- */}
-              {/* Checkpoint geofence circle              */}
-              {/* --------------------------------------- */}
-
-              <Circle
-                center={[checkpoint.latitude, checkpoint.longitude]}
-                radius={checkpoint.radius}
-                pathOptions={{
-                  color:
-                    checkpoint.status === "COMPLETED"
-                      ? "#22c55e"
-                      : checkpoint.status === "CLAIMED"
-                        ? "#a855f7"
-                        : checkpoint.status === "AVAILABLE"
-                          ? "#f5c542"
-                          : "#6b7280",
-
-                  fillColor:
-                    checkpoint.status === "COMPLETED"
-                      ? "#22c55e"
-                      : checkpoint.status === "CLAIMED"
-                        ? "#a855f7"
-                        : checkpoint.status === "AVAILABLE"
-                          ? "#f5c542"
-                          : "#6b7280",
-
-                  fillOpacity: 0.15,
-                  weight: 2,
-                }}
-              />
-
-              {/* --------------------------------------- */}
-              {/* Checkpoint marker                       */}
-              {/* --------------------------------------- */}
-
-              <Marker
-                position={[checkpoint.latitude, checkpoint.longitude]}
-                icon={playerIcon}
-                eventHandlers={{
-                  click: () => {
-                    if (
-                      checkpoint.status === "REVEALED" ||
-                      checkpoint.status === "DISCOVERED" ||
-                      checkpoint.status === "CHALLENGE"
-                    ) {
-                      onCheckpointSelect(checkpoint.id);
-                    }
-                  },
-                }}
-              />
-            </Fragment>
-          ))}
+            <Marker
+              position={[checkpoint.latitude, checkpoint.longitude]}
+              icon={playerIcon}
+              eventHandlers={{
+                click: () => {
+                  onCheckpointSelect(checkpoint.id);
+                },
+              }}
+            />
+          </Fragment>
+        ))}
       </MapContainer>
     </div>
   );

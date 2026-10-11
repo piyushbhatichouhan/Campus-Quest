@@ -8,6 +8,7 @@ import Lobby from "./pages/Lobby";
 import Game from "./pages/Game";
 import Leaderboard from "./pages/Leaderboard";
 import Profile from "./pages/Profile";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function LoadingScreen() {
   return (
@@ -58,6 +59,20 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
 function PublicRoute({ children }) {
   const { user, loading, team, teamLoading } = useAuth();
 
@@ -66,7 +81,8 @@ function PublicRoute({ children }) {
   }
 
   if (user && team && team.hasTeam) {
-    if (team.status === "waiting") {
+    const effectiveStatus = team.eventStatus || team.status;
+    if (effectiveStatus === "waiting") {
       return <Navigate to="/lobby" replace />;
     }
     return <Navigate to="/game" replace />;
@@ -93,7 +109,8 @@ function RootRedirect() {
     return <Navigate to="/register" replace />;
   }
 
-  if (team.status === "waiting") {
+  const effectiveStatus = team.eventStatus || team.status;
+  if (effectiveStatus === "waiting") {
     return <Navigate to="/lobby" replace />;
   }
 
@@ -162,6 +179,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Profile />
           </ProtectedRoute>
+        }
+      />
+
+      {/* Administrator Control Center */}
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
         }
       />
 

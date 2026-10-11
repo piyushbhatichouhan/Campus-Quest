@@ -3,7 +3,7 @@ const { requireAuth } = require("../middleware/requireAuth");
 const { requireAdmin } = require("../middleware/requireAdmin");
 const { actionLimiter } = require("../middleware/security");
 const {
-  getPublicEventStatus,
+  getAdminEventStatus,
   startEvent,
   stopEvent,
   finalizeEvent,
@@ -28,14 +28,25 @@ function asyncHandler(handler) {
 // All admin routes require authentication AND admin privileges
 router.use(requireAuth, requireAdmin);
 
-// GET /api/admin/event - Current event lifecycle state and timestamps
+// GET /api/admin/event - Current event lifecycle state, timestamps, and admin audit metadata
 router.get(
   "/event",
   asyncHandler(async (req, res) => {
-    const data = await getPublicEventStatus();
+    const data = await getAdminEventStatus();
     res.json({ success: true, data });
   }),
 );
+
+// Explicitly block event lifecycle mutations via GET requests
+router.get(["/event/start", "/event/stop", "/event/finalize"], (req, res) => {
+  res.status(405).json({
+    success: false,
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Event lifecycle control operations require a POST request.",
+    },
+  });
+});
 
 // POST /api/admin/event/start - Start event across all teams (waiting -> active)
 router.post(

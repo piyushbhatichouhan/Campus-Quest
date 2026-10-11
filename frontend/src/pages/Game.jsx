@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { playDiscoverySound, playSuccessSound } from "../utils/sounds";
@@ -28,6 +29,8 @@ function Game() {
     checkpoints: checkpointStates,
     currentCheckpoint,
     completedCheckpoints,
+    completedJourney,
+    currentClue,
     claimCheckpoint,
     submitChallenge,
     score,
@@ -35,6 +38,8 @@ function Game() {
     memberCount,
     maxMembers,
     teamStatus,
+    eventStatus,
+    elapsedSeconds,
     inventory,
     rank,
     level,
@@ -55,13 +60,13 @@ function Game() {
     ) || null;
 
   useEffect(() => {
-    if (teamStatus === "waiting") {
+    if (eventStatus === "waiting" || teamStatus === "waiting") {
       navigate("/lobby");
     }
-  }, [teamStatus, navigate]);
+  }, [eventStatus, teamStatus, navigate]);
 
   useEffect(() => {
-    if (!currentCheckpoint) return;
+    if (!currentCheckpoint || eventStatus !== "active") return;
 
     if (currentCheckpoint.status === "DISCOVERED") {
       playDiscoverySound();
@@ -71,7 +76,7 @@ function Game() {
     if (currentCheckpoint.status === "CHALLENGE") {
       setSelectedCheckpointId(currentCheckpoint.id);
     }
-  }, [currentCheckpoint]);
+  }, [currentCheckpoint, eventStatus]);
 
   async function handleClaim(checkpointId) {
     const success = await claimCheckpoint(checkpointId);
@@ -129,11 +134,14 @@ function Game() {
             fontSize: "12px",
           }}
         >
-          <p>CONNECTING TO DAVV QUEST...</p>
+          <p>CONNECTING TO CAMPUS QUEST...</p>
         </main>
       </div>
     );
   }
+
+  const isEventEnded =
+    eventStatus === "stopped" || eventStatus === "completed";
 
   return (
     <div className="game-page">
@@ -147,8 +155,32 @@ function Game() {
         teamName={teamName}
         memberCount={memberCount}
         maxMembers={maxMembers}
+        elapsedSeconds={elapsedSeconds}
+        eventStatus={eventStatus}
         onMenuOpen={() => setMenuOpen(true)}
       />
+
+      {isEventEnded && (
+        <div className="event-ended-banner" role="status" aria-live="assertive">
+          <div className="event-ended-banner-text">
+            <strong>
+              {eventStatus === "completed"
+                ? "🏁 OFFICIAL RESULTS FINALIZED"
+                : "🛑 EVENT ENDED BY ADMINISTRATOR"}
+            </strong>
+            <span>
+              All checkpoint claims and challenge submissions are locked.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="event-ended-banner-btn"
+            onClick={() => navigate("/leaderboard")}
+          >
+            VIEW STANDINGS ▶
+          </button>
+        </div>
+      )}
 
       <main className="game-main">
         {(apiError || error) && (
@@ -173,10 +205,14 @@ function Game() {
           <QuestsView
             checkpoints={checkpointStates}
             currentCheckpoint={currentCheckpoint}
+            currentClue={currentClue}
+            completedJourney={completedJourney}
+            eventStatus={eventStatus}
             onSelectCheckpoint={handleQuestSelect}
             score={score}
             gameCompleted={gameCompleted}
             onSwitchToMap={() => setActiveTab("map")}
+            onNavigateLeaderboard={() => navigate("/leaderboard")}
           />
         )}
 
@@ -201,9 +237,11 @@ function Game() {
           />
         )}
 
-        {/* Quest Card Modal Overlay (available in any tab) */}
+        {/* Quest Card Modal Overlay */}
         <QuestCard
           checkpoint={selectedCheckpoint}
+          eventStatus={eventStatus}
+          currentClue={currentClue}
           onClaim={handleClaim}
           onSubmitChallenge={handleSubmitChallenge}
           onClose={handleCloseQuest}

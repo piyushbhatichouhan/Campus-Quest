@@ -51,6 +51,15 @@
   border-left: 6px solid #9c27b0;
 }
 
+.team-notification-toast.event-start {
+  border-left: 6px solid #00e676;
+}
+
+.team-notification-toast.event-stop {
+  border-left: 6px solid #ef4444;
+  background: #2b1616;
+}
+
 .team-toast-icon {
   font-size: 16px;
   flex-shrink: 0;

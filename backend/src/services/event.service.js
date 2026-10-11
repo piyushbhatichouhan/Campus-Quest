@@ -1,4 +1,4 @@
-const { db } = require("../config/firebase");
+const { db, serverTimestamp } = require("../config/firebase");
 const checkpoints = require("../data/checkpoints");
 
 const eventsCollection = db.collection("events");
@@ -15,6 +15,36 @@ class EventError extends Error {
   }
 }
 
+function toIso(ts) {
+  if (!ts) return null;
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  if (ts instanceof Date) return ts.toISOString();
+  if (typeof ts === "string") return ts;
+  if (typeof ts === "number") return new Date(ts).toISOString();
+  return null;
+}
+
+function toMillis(ts) {
+  if (!ts) return null;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.toDate === "function") return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  const parsed = new Date(ts).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function formatTimeShort(ts) {
+  const iso = toIso(ts);
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 /**
  * Retrieves or initializes the single authoritative main event document.
  */
@@ -24,6 +54,7 @@ async function getOrCreateEventDoc(transaction = null) {
   if (transaction) {
     const snap = await transaction.get(eventRef);
     if (!snap.exists) {
+      const now = serverTimestamp();
       const initial = {
         id: MAIN_EVENT_ID,
         status: "waiting", // waiting | active | stopped | completed
@@ -33,17 +64,18 @@ async function getOrCreateEventDoc(transaction = null) {
         startedBy: null,
         stoppedBy: null,
         finalizedBy: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
       };
       transaction.set(eventRef, initial);
-      return { eventRef, eventData: initial };
+      return { eventRef, eventData: { ...initial, status: "waiting" } };
     }
     return { eventRef, eventData: snap.data() };
   }
 
   const snap = await eventRef.get();
   if (!snap.exists) {
+    const now = serverTimestamp();
     const initial = {
       id: MAIN_EVENT_ID,
       status: "waiting",
@@ -53,11 +85,12 @@ async function getOrCreateEventDoc(transaction = null) {
       startedBy: null,
       stoppedBy: null,
       finalizedBy: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     };
     await eventRef.set(initial);
-    return { eventRef, eventData: initial };
+    const createdSnap = await eventRef.get();
+    return { eventRef, eventData: createdSnap.exists ? createdSnap.data() : initial };
   }
 
   return { eventRef, eventData: snap.data() };
@@ -65,54 +98,65 @@ async function getOrCreateEventDoc(transaction = null) {
 
 /**
  * Public/Player-facing event status.
+ * Exposes ONLY public event lifecycle fields, never admin identities or hidden checkpoint data.
  */
 async function getPublicEventStatus() {
   const { eventData } = await getOrCreateEventDoc();
 
   let elapsedSeconds = 0;
-  if (eventData.startedAt) {
-    const startTime = eventData.startedAt.toMillis
-      ? eventData.startedAt.toMillis()
-      : new Date(eventData.startedAt).getTime();
-
-    const endTime = eventData.stoppedAt
-      ? (eventData.stoppedAt.toMillis
-          ? eventData.stoppedAt.toMillis()
-          : new Date(eventData.stoppedAt).getTime())
-      : Date.now();
-
-    elapsedSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
+  const startMillis = toMillis(eventData.startedAt);
+  if (startMillis) {
+    const stopMillis = toMillis(eventData.stoppedAt);
+    const endMillis = stopMillis || Date.now();
+    elapsedSeconds = Math.max(0, Math.floor((endMillis - startMillis) / 1000));
   }
 
   return {
     status: eventData.status, // waiting | active | stopped | completed
-    startedAt: eventData.startedAt?.toDate ? eventData.startedAt.toDate().toISOString() : eventData.startedAt,
-    stoppedAt: eventData.stoppedAt?.toDate ? eventData.stoppedAt.toDate().toISOString() : eventData.stoppedAt,
-    finalizedAt: eventData.finalizedAt?.toDate ? eventData.finalizedAt.toDate().toISOString() : eventData.finalizedAt,
+    startedAt: toIso(eventData.startedAt),
+    stoppedAt: toIso(eventData.stoppedAt),
+    finalizedAt: toIso(eventData.finalizedAt),
     elapsedSeconds,
     totalCheckpoints: checkpoints.length,
+    isOfficial: eventData.status === "completed",
+    serverTime: new Date().toISOString(),
+  };
+}
+
+/**
+ * Admin-facing event status (includes audit metadata and checkpoint list for analytics).
+ */
+async function getAdminEventStatus() {
+  const { eventData } = await getOrCreateEventDoc();
+  const publicStatus = await getPublicEventStatus();
+
+  return {
+    ...publicStatus,
+    startedBy: eventData.startedBy || null,
+    stoppedBy: eventData.stoppedBy || null,
+    finalizedBy: eventData.finalizedBy || null,
+    checkpoints: checkpoints.map((cp) => ({
+      id: cp.id,
+      order: cp.order,
+      name: cp.name,
+      points: cp.points,
+    })),
   };
 }
 
 /**
  * Admin action: Start the event.
- * Transition: waiting -> active
+ * Transition: waiting -> active (strictly from waiting)
  */
 async function startEvent(adminUser) {
+  if (!adminUser) {
+    throw new EventError("Administrator authentication required.", 401, "UNAUTHORIZED");
+  }
   const adminId = adminUser.email || adminUser.uid || "admin";
+  const eventRef = eventsCollection.doc(MAIN_EVENT_ID);
 
-  return db.runTransaction(async (transaction) => {
-    const { eventRef, eventData } = await getOrCreateEventDoc(transaction);
-
-    if (eventData.status === "active") {
-      // Idempotent return if already started by admin
-      return {
-        success: true,
-        status: "active",
-        message: "Event is already active.",
-        startedAt: eventData.startedAt,
-      };
-    }
+  await db.runTransaction(async (transaction) => {
+    const { eventData } = await getOrCreateEventDoc(transaction);
 
     if (eventData.status !== "waiting") {
       throw new EventError(
@@ -122,42 +166,76 @@ async function startEvent(adminUser) {
       );
     }
 
-    const now = new Date();
+    const ts = serverTimestamp();
 
     transaction.update(eventRef, {
       status: "active",
-      startedAt: now,
+      startedAt: ts,
+      stoppedAt: null,
+      finalizedAt: null,
       startedBy: adminId,
-      updatedAt: now,
+      stoppedBy: null,
+      finalizedBy: null,
+      updatedAt: ts,
     });
-
-    return {
-      success: true,
-      status: "active",
-      startedAt: now.toISOString(),
-      startedBy: adminId,
-    };
   });
+
+  // Read authoritative server timestamp after transaction commit
+  const updatedSnap = await eventRef.get();
+  const updatedEvent = updatedSnap.data() || {};
+  const startedAtIso = toIso(updatedEvent.startedAt) || new Date().toISOString();
+
+  // Unlock first mystery clue for all eligible registered teams & send start notification
+  try {
+    const teamsSnap = await teamsCollection.get();
+    await Promise.all(
+      teamsSnap.docs.map(async (teamDoc) => {
+        const tData = teamDoc.data();
+        const teamRef = teamsCollection.doc(teamDoc.id);
+        const ts = serverTimestamp();
+        if (tData.status === "waiting") {
+          await teamRef.update({
+            status: "active",
+            updatedAt: ts,
+          });
+        }
+        const evRef = teamRef.collection("events").doc();
+        await evRef.set({
+          id: evRef.id,
+          type: "event_started",
+          actorUid: adminUser.uid || "admin",
+          actorName: "Administrator",
+          message:
+            "The Campus Quest competition has started! Your first mystery clue is now unlocked.",
+          createdAt: ts,
+        });
+      }),
+    );
+  } catch (err) {
+    // Non-fatal notification broadcast error; global event doc is already active
+  }
+
+  return {
+    success: true,
+    status: "active",
+    startedAt: startedAtIso,
+    startedBy: adminId,
+  };
 }
 
 /**
  * Admin action: Stop the event.
- * Transition: active -> stopped
+ * Transition: active -> stopped (strictly from active)
  */
 async function stopEvent(adminUser) {
+  if (!adminUser) {
+    throw new EventError("Administrator authentication required.", 401, "UNAUTHORIZED");
+  }
   const adminId = adminUser.email || adminUser.uid || "admin";
+  const eventRef = eventsCollection.doc(MAIN_EVENT_ID);
 
-  return db.runTransaction(async (transaction) => {
-    const { eventRef, eventData } = await getOrCreateEventDoc(transaction);
-
-    if (eventData.status === "stopped") {
-      return {
-        success: true,
-        status: "stopped",
-        message: "Event is already stopped.",
-        stoppedAt: eventData.stoppedAt,
-      };
-    }
+  await db.runTransaction(async (transaction) => {
+    const { eventData } = await getOrCreateEventDoc(transaction);
 
     if (eventData.status !== "active") {
       throw new EventError(
@@ -167,42 +245,63 @@ async function stopEvent(adminUser) {
       );
     }
 
-    const now = new Date();
+    const ts = serverTimestamp();
 
     transaction.update(eventRef, {
       status: "stopped",
-      stoppedAt: now,
+      stoppedAt: ts,
       stoppedBy: adminId,
-      updatedAt: now,
+      updatedAt: ts,
     });
-
-    return {
-      success: true,
-      status: "stopped",
-      stoppedAt: now.toISOString(),
-      stoppedBy: adminId,
-    };
   });
+
+  const updatedSnap = await eventRef.get();
+  const updatedEvent = updatedSnap.data() || {};
+  const stoppedAtIso = toIso(updatedEvent.stoppedAt) || new Date().toISOString();
+
+  // Notify connected teams that the event has ended without deleting any progress
+  try {
+    const teamsSnap = await teamsCollection.get();
+    await Promise.all(
+      teamsSnap.docs.map(async (teamDoc) => {
+        const teamRef = teamsCollection.doc(teamDoc.id);
+        const evRef = teamRef.collection("events").doc();
+        await evRef.set({
+          id: evRef.id,
+          type: "event_stopped",
+          actorUid: adminUser.uid || "admin",
+          actorName: "Administrator",
+          message:
+            "The administrator has stopped the event. Gameplay is now disabled and results are frozen.",
+          createdAt: serverTimestamp(),
+        });
+      }),
+    );
+  } catch (err) {
+    // Non-fatal notification broadcast error
+  }
+
+  return {
+    success: true,
+    status: "stopped",
+    stoppedAt: stoppedAtIso,
+    stoppedBy: adminId,
+  };
 }
 
 /**
  * Admin action: Finalize event results.
- * Transition: stopped -> completed
+ * Transition: stopped -> completed (strictly from stopped)
  */
 async function finalizeEvent(adminUser) {
+  if (!adminUser) {
+    throw new EventError("Administrator authentication required.", 401, "UNAUTHORIZED");
+  }
   const adminId = adminUser.email || adminUser.uid || "admin";
+  const eventRef = eventsCollection.doc(MAIN_EVENT_ID);
 
-  return db.runTransaction(async (transaction) => {
-    const { eventRef, eventData } = await getOrCreateEventDoc(transaction);
-
-    if (eventData.status === "completed") {
-      return {
-        success: true,
-        status: "completed",
-        message: "Event is already finalized.",
-        finalizedAt: eventData.finalizedAt,
-      };
-    }
+  await db.runTransaction(async (transaction) => {
+    const { eventData } = await getOrCreateEventDoc(transaction);
 
     if (eventData.status !== "stopped") {
       throw new EventError(
@@ -212,22 +311,27 @@ async function finalizeEvent(adminUser) {
       );
     }
 
-    const now = new Date();
+    const ts = serverTimestamp();
 
     transaction.update(eventRef, {
       status: "completed",
-      finalizedAt: now,
+      finalizedAt: ts,
       finalizedBy: adminId,
-      updatedAt: now,
+      updatedAt: ts,
     });
-
-    return {
-      success: true,
-      status: "completed",
-      finalizedAt: now.toISOString(),
-      finalizedBy: adminId,
-    };
   });
+
+  const updatedSnap = await eventRef.get();
+  const updatedEvent = updatedSnap.data() || {};
+  const finalizedAtIso = toIso(updatedEvent.finalizedAt) || new Date().toISOString();
+
+  return {
+    success: true,
+    status: "completed",
+    isOfficial: true,
+    finalizedAt: finalizedAtIso,
+    finalizedBy: adminId,
+  };
 }
 
 /**
@@ -235,14 +339,14 @@ async function finalizeEvent(adminUser) {
  */
 async function getAdminOverview() {
   const [eventData, teamsSnap, playersSnap] = await Promise.all([
-    getPublicEventStatus(),
+    getAdminEventStatus(),
     teamsCollection.get(),
     playersCollection.get(),
   ]);
 
   const teams = teamsSnap.docs.map((d) => d.data());
   const completedTeams = teams.filter(
-    (t) => (t.completedCheckpoints || []).length >= checkpoints.length,
+    (t) => (t.completedCheckpoints || []).length >= checkpoints.length || Boolean(t.completedAt),
   ).length;
 
   return {
@@ -251,7 +355,7 @@ async function getAdminOverview() {
       totalTeams: teams.length,
       totalPlayers: playersSnap.size,
       completedTeams,
-      inProgressTeams: teams.length - completedTeams,
+      inProgressTeams: Math.max(0, teams.length - completedTeams),
       totalCheckpoints: checkpoints.length,
     },
   };
@@ -265,6 +369,7 @@ async function getAdminTeamsList() {
 
   return teamsSnap.docs.map((d) => {
     const t = d.data();
+    const completedCount = (t.completedCheckpoints || []).length;
     return {
       teamId: d.id,
       name: t.name,
@@ -274,10 +379,12 @@ async function getAdminTeamsList() {
       memberCount: t.memberCount || 1,
       maxMembers: t.maxMembers || 4,
       score: t.score || 0,
-      completedCount: (t.completedCheckpoints || []).length,
+      completedCount,
       totalCheckpoints: checkpoints.length,
-      completedAt: t.completedAt?.toDate ? t.completedAt.toDate().toISOString() : t.completedAt,
-      createdAt: t.createdAt?.toDate ? t.createdAt.toDate().toISOString() : t.createdAt,
+      progress: `${completedCount}/${checkpoints.length}`,
+      completedAt: toIso(t.completedAt),
+      completedAtFormatted: formatTimeShort(t.completedAt) || "—",
+      createdAt: toIso(t.createdAt),
     };
   });
 }
@@ -286,7 +393,11 @@ async function getAdminTeamsList() {
  * Admin single team detail with member roster and checkpoint timeline.
  */
 async function getAdminTeamDetail(teamId) {
-  const teamDoc = await teamsCollection.doc(teamId).get();
+  const [teamDoc, { eventData }] = await Promise.all([
+    teamsCollection.doc(teamId).get(),
+    getOrCreateEventDoc(),
+  ]);
+
   if (!teamDoc.exists) {
     throw new EventError("Team not found.", 404, "NOT_FOUND");
   }
@@ -298,26 +409,80 @@ async function getAdminTeamDetail(teamId) {
     .orderBy("joinedAt", "asc")
     .get();
 
-  const members = membersSnap.docs.map((d) => d.data());
+  const members = membersSnap.docs.map((d) => {
+    const m = d.data();
+    return {
+      ...m,
+      joinedAt: toIso(m.joinedAt),
+    };
+  });
 
   // Build ordered checkpoint timeline
   const checkpointProgress = team.checkpointProgress || {};
   const timeline = checkpoints.map((cp) => {
     const progress = checkpointProgress[cp.id] || null;
+    const claimedAtIso = toIso(progress?.claimedAt);
+    const completedAtIso = toIso(progress?.completedAt);
     return {
       checkpointId: cp.id,
       name: cp.name,
       order: cp.order,
-      claimed: Boolean(progress?.claimedAt),
-      claimedAt: progress?.claimedAt?.toDate
-        ? progress.claimedAt.toDate().toISOString()
-        : progress?.claimedAt || null,
-      completed: Boolean(progress?.completedAt),
-      completedAt: progress?.completedAt?.toDate
-        ? progress.completedAt.toDate().toISOString()
-        : progress?.completedAt || null,
+      points: cp.points,
+      claimed: Boolean(claimedAtIso),
+      claimedAt: claimedAtIso,
+      claimedAtFormatted: formatTimeShort(claimedAtIso) || "—",
+      completed: Boolean(completedAtIso),
+      completedAt: completedAtIso,
+      completedAtFormatted: formatTimeShort(completedAtIso) || "—",
     };
   });
+
+  // Build chronological step-by-step journey timeline for Admin Inspection
+  const eventStartedAtIso = toIso(eventData.startedAt);
+  const adventureCompletedAtIso = toIso(team.completedAt);
+
+  const journeySteps = [
+    {
+      stepType: "event_start",
+      label: "Event start time",
+      reached: Boolean(eventStartedAtIso),
+      timestamp: eventStartedAtIso,
+      formattedTime: formatTimeShort(eventStartedAtIso) || "Not started",
+    },
+  ];
+
+  timeline.forEach((cp) => {
+    journeySteps.push({
+      stepType: "checkpoint_claimed",
+      checkpointId: cp.checkpointId,
+      checkpointOrder: cp.order,
+      checkpointName: cp.name,
+      label: `Checkpoint ${cp.order} claimed (${cp.name})`,
+      reached: cp.claimed,
+      timestamp: cp.claimedAt,
+      formattedTime: cp.claimedAtFormatted,
+    });
+    journeySteps.push({
+      stepType: "challenge_completed",
+      checkpointId: cp.checkpointId,
+      checkpointOrder: cp.order,
+      checkpointName: cp.name,
+      label: `Checkpoint ${cp.order} challenge completed (${cp.name})`,
+      reached: cp.completed,
+      timestamp: cp.completedAt,
+      formattedTime: cp.completedAtFormatted,
+    });
+  });
+
+  journeySteps.push({
+    stepType: "adventure_completion",
+    label: "Adventure completion",
+    reached: Boolean(adventureCompletedAtIso),
+    timestamp: adventureCompletedAtIso,
+    formattedTime: formatTimeShort(adventureCompletedAtIso) || "—",
+  });
+
+  const completedCount = (team.completedCheckpoints || []).length;
 
   return {
     teamId,
@@ -325,12 +490,20 @@ async function getAdminTeamDetail(teamId) {
     joinCode: team.joinCode,
     leaderUid: team.leaderUid,
     leaderName: team.leaderName,
-    memberCount: members.length,
+    memberCount: members.length || team.memberCount || 1,
+    maxMembers: team.maxMembers || 4,
     score: team.score || 0,
-    completedCount: (team.completedCheckpoints || []).length,
-    completedAt: team.completedAt?.toDate ? team.completedAt.toDate().toISOString() : team.completedAt,
+    completedCount,
+    totalCheckpoints: checkpoints.length,
+    progress: `${completedCount}/${checkpoints.length}`,
+    eventStatus: eventData.status,
+    eventStartedAt: eventStartedAtIso,
+    eventStartedAtFormatted: formatTimeShort(eventStartedAtIso) || "—",
+    completedAt: adventureCompletedAtIso,
+    completedAtFormatted: formatTimeShort(adventureCompletedAtIso) || "—",
     members,
     timeline,
+    journeySteps,
   };
 }
 
@@ -352,26 +525,19 @@ async function getCheckpointAnalytics(checkpointId) {
     const progress = t.checkpointProgress?.[checkpointId];
 
     if (progress?.claimedAt) {
-      const claimMillis = progress.claimedAt.toMillis
-        ? progress.claimedAt.toMillis()
-        : new Date(progress.claimedAt).getTime();
-
-      const completedMillis = progress.completedAt
-        ? (progress.completedAt.toMillis
-            ? progress.completedAt.toMillis()
-            : new Date(progress.completedAt).getTime())
-        : null;
+      const claimMillis = toMillis(progress.claimedAt) || 0;
+      const completedMillis = toMillis(progress.completedAt);
+      const claimedAtIso = toIso(progress.claimedAt);
+      const completedAtIso = toIso(progress.completedAt);
 
       arrivals.push({
         teamId: doc.id,
         teamName: t.name,
         claimMillis,
-        claimedAt: progress.claimedAt.toDate
-          ? progress.claimedAt.toDate().toISOString()
-          : progress.claimedAt,
-        completedAt: progress.completedAt?.toDate
-          ? progress.completedAt.toDate().toISOString()
-          : progress.completedAt || null,
+        claimedAt: claimedAtIso,
+        claimedAtFormatted: formatTimeShort(claimedAtIso) || "—",
+        completedAt: completedAtIso,
+        completedAtFormatted: formatTimeShort(completedAtIso) || "—",
         durationSeconds:
           completedMillis && claimMillis
             ? Math.max(0, Math.floor((completedMillis - claimMillis) / 1000))
@@ -380,12 +546,19 @@ async function getCheckpointAnalytics(checkpointId) {
     }
   });
 
-  // Rank by claim timestamp (earliest first)
-  arrivals.sort((a, b) => a.claimMillis - b.claimMillis);
+  // Rank by original successful claim timestamp (earliest first, deterministic tie-breaker by teamId)
+  arrivals.sort((a, b) => {
+    if (a.claimMillis !== b.claimMillis) {
+      return a.claimMillis - b.claimMillis;
+    }
+    return String(a.teamId).localeCompare(String(b.teamId));
+  });
 
   return {
     checkpointId: cp.id,
+    checkpointOrder: cp.order,
     checkpointName: cp.name,
+    points: cp.points,
     arrivals: arrivals.map((item, index) => ({
       rank: index + 1,
       ...item,
@@ -396,6 +569,7 @@ async function getCheckpointAnalytics(checkpointId) {
 module.exports = {
   getOrCreateEventDoc,
   getPublicEventStatus,
+  getAdminEventStatus,
   startEvent,
   stopEvent,
   finalizeEvent,

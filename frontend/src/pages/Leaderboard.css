@@ -402,41 +402,106 @@
     font-size: 8px;
 }
 
-.you-badge {
-    margin-left: 5px;
-
-    padding: 3px 4px;
-
-    background: #62d84e;
-
-    color: #172114;
-
-    font-family: "Press Start 2P", monospace;
-
-    font-size: 4px;
+.live-indicator.frozen {
+    color: #f5c542;
 }
 
-.ranking-xp {
+.live-indicator.frozen span {
+    background: #f5c542;
+    box-shadow: 0 0 7px #f5c542;
+}
+
+.race-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.race-leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.race-leaderboard-table th {
+    text-align: left;
+    padding: 10px 8px;
+    background: #171a1c;
+    border-bottom: 2px solid #111315;
+    font-family: "Press Start 2P", monospace;
+    font-size: 8px;
+    color: #f5c542;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.race-leaderboard-table td {
+    padding: 12px 8px;
+    background: #292d2f;
+    border-bottom: 2px solid #1c1f21;
+    vertical-align: middle;
+}
+
+.race-leaderboard-table tr.current-player-row td {
+    background: #30452b;
+}
+
+.race-col-rank {
+    font-family: "Press Start 2P", monospace;
+    font-size: 10px;
+    color: #f5c542;
+    width: 60px;
+}
+
+.race-team-cell {
     display: flex;
     flex-direction: column;
-
-    align-items: flex-end;
-
-    gap: 2px;
+    gap: 3px;
 }
 
-.ranking-xp strong {
-    color: #f5c542;
-
-    font-family: "Press Start 2P", monospace;
-
-    font-size: 8px;
+.race-team-cell strong {
+    font-size: 13px;
+    color: #ffffff;
 }
 
-.ranking-xp span {
+.race-team-cell small {
+    font-size: 10px;
     color: #a8aaa7;
+}
 
-    font-size: 7px;
+.race-col-progress {
+    font-family: "Press Start 2P", monospace;
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+.race-progress-pill {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #1c1f21;
+    border: 1px solid #3c4246;
+    color: #e2e8f0;
+}
+
+.race-progress-pill.completed {
+    background: #143621;
+    border-color: #42d17d;
+    color: #6ee7a0;
+}
+
+.race-col-finished {
+    font-family: "Press Start 2P", monospace;
+    font-size: 9px;
+    color: #f5f2e8;
+    white-space: nowrap;
+}
+
+.you-badge {
+    margin-left: 6px;
+    padding: 3px 5px;
+    background: #62d84e;
+    color: #172114;
+    font-family: "Press Start 2P", monospace;
+    font-size: 6px;
 }
 
 /* YOUR POSITION */
