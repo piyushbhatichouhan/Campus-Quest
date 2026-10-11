@@ -3,6 +3,8 @@ const test = require("node:test");
 const assert = require("node:assert");
 const request = require("supertest");
 const app = require("../app");
+const { db } = require("../config/firebase");
+const { startEvent, MAIN_EVENT_ID } = require("../services/event.service");
 const {
   createTeam,
   joinTeam,
@@ -20,6 +22,16 @@ const {
 } = require("../services/game.service");
 
 test("Campus Quest Team System & Shared Multiplayer Test Suite", async (t) => {
+  // Ensure event is in waiting state for team registration test
+  await db.collection("events").doc(MAIN_EVENT_ID).set({
+    id: MAIN_EVENT_ID,
+    status: "waiting",
+    startedAt: null,
+    stoppedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
   const testLeaderUid = `test_leader_${Date.now()}`;
   const testMember1Uid = `test_member1_${Date.now()}`;
   const testMember2Uid = `test_member2_${Date.now()}`;
@@ -121,21 +133,21 @@ test("Campus Quest Team System & Shared Multiplayer Test Suite", async (t) => {
     );
   });
 
-  await t.test("6. Authorization: Only leader can start adventure; members are rejected", async () => {
-    // Non-leader attempts to start
+  await t.test("6. Authorization: Administrator controls event start; team leaders cannot start", async () => {
+    // Leader attempt to start is rejected
     await assert.rejects(
       async () => {
-        await startAdventure({ uid: testMember1Uid });
+        await startAdventure({ uid: testLeaderUid });
       },
       (err) => {
-        assert.strictEqual(err.code, "NOT_LEADER");
+        assert.strictEqual(err.code, "ADMIN_CONTROLLED");
         assert.strictEqual(err.status, 403);
         return true;
       },
     );
 
-    // Leader starts
-    const startResult = await startAdventure({ uid: testLeaderUid });
+    // Administrator starts the event
+    const startResult = await startEvent({ uid: "admin_uid", email: "admin@test.com", admin: true });
     assert.strictEqual(startResult.status, "active");
 
     // Check status via getMyTeam
@@ -153,7 +165,7 @@ test("Campus Quest Team System & Shared Multiplayer Test Suite", async (t) => {
         );
       },
       (err) => {
-        assert.strictEqual(err.code, "TEAM_LOCKED");
+        assert.ok(err.code === "TEAM_LOCKED" || err.code === "JOINING_CLOSED");
         return true;
       },
     );

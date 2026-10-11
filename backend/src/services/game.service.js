@@ -1,6 +1,7 @@
 const { db } = require("../config/firebase");
 const checkpoints = require("../data/checkpoints");
 const { sanitizeString, isValidCoordinate } = require("../middleware/security");
+const { getOrCreateEventDoc } = require("./event.service");
 
 const teams = db.collection("teams");
 const players = db.collection("players");
@@ -93,7 +94,6 @@ async function startGame(user, customDisplayName) {
     return getGameState(uid);
   }
 
-  // Fallback for single-player backwards compatibility if needed
   const rawName =
     customDisplayName ||
     user.name ||
@@ -102,7 +102,6 @@ async function startGame(user, customDisplayName) {
 
   const displayName = sanitizeString(rawName, 30) || "Explorer";
 
-  // Create or update player document
   await players.doc(uid).set(
     {
       uid,
@@ -120,7 +119,7 @@ async function startGame(user, customDisplayName) {
     score: 0,
     completedCheckpoints: [],
     claimedCheckpointId: null,
-    currentCheckpoint: getCheckpointState(0),
+    currentCheckpoint: null,
     currentCheckpointIndex: 0,
     gameCompleted: false,
     inventory: [],
@@ -137,6 +136,9 @@ async function getGameState(uid) {
   }
 
   const playerData = playerSnap.data();
+  const { eventData } = await getOrCreateEventDoc();
+  const isEventWaiting = eventData.status === "waiting";
+  const isEventStoppedOrDone = eventData.status === "stopped" || eventData.status === "completed";
 
   // If player is mapped to a team, retrieve shared team game state
   if (playerData.teamId) {
@@ -153,8 +155,13 @@ async function getGameState(uid) {
           .get();
         rank = higherTeams.size + 1;
       } catch (err) {
-        // Fallback rank calculation
+        // Fallback
       }
+
+      // Checkpoint clue is HIDDEN if event is still waiting!
+      const currentCheckpoint = isEventWaiting
+        ? null
+        : getCheckpointState(index);
 
       return {
         uid,
@@ -164,11 +171,13 @@ async function getGameState(uid) {
         role: playerData.role || "member",
         memberCount: team.memberCount || 1,
         maxMembers: team.maxMembers || 4,
-        status: team.status, // waiting | active | completed
+        status: isEventWaiting ? "waiting" : isEventStoppedOrDone ? eventData.status : team.status,
+        eventStatus: eventData.status,
+        eventStartedAt: eventData.startedAt?.toDate ? eventData.startedAt.toDate().toISOString() : eventData.startedAt,
         score: team.score || 0,
         completedCheckpoints: team.completedCheckpoints || [],
-        claimedCheckpointId: team.claimedCheckpointId || null,
-        currentCheckpoint: getCheckpointState(index),
+        claimedCheckpointId: isEventWaiting ? null : (team.claimedCheckpointId || null),
+        currentCheckpoint,
         currentCheckpointIndex: index,
         gameCompleted: index >= checkpoints.length,
         inventory: team.inventory || [],
@@ -184,13 +193,14 @@ async function getGameState(uid) {
     displayName: playerData.displayName || "Explorer",
     score: playerData.score || 0,
     completedCheckpoints: playerData.completedCheckpoints || [],
-    claimedCheckpointId: playerData.claimedCheckpointId || null,
-    currentCheckpoint: getCheckpointState(playerData.currentCheckpointIndex || 0),
-    currentCheckpointIndex: playerData.currentCheckpointIndex || 0,
-    gameCompleted: (playerData.currentCheckpointIndex || 0) >= checkpoints.length,
-    inventory: playerData.inventory || [],
+    claimedCheckpointId: null,
+    currentCheckpoint: null,
+    currentCheckpointIndex: 0,
+    gameCompleted: false,
+    inventory: [],
     rank: 1,
     needsTeam: true,
+    eventStatus: eventData.status,
   };
 }
 
@@ -226,6 +236,17 @@ async function claimCheckpoint(uid, checkpointId, latitude, longitude) {
   const { player, teamRef } = await resolvePlayerTeam(uid);
 
   return db.runTransaction(async (transaction) => {
+    // 1. Authoritative global event state check inside the transaction
+    const { eventData } = await getOrCreateEventDoc(transaction);
+
+    if (eventData.status !== "active") {
+      throw new GameError(
+        `Checkpoint claims are disabled because the competition is currently '${eventData.status}'.`,
+        403,
+        "EVENT_NOT_ACTIVE",
+      );
+    }
+
     const teamSnap = await transaction.get(teamRef);
 
     if (!teamSnap.exists) {
@@ -233,14 +254,6 @@ async function claimCheckpoint(uid, checkpointId, latitude, longitude) {
     }
 
     const team = teamSnap.data();
-
-    if (team.status === "waiting") {
-      throw new GameError(
-        "The adventure has not started yet. Please wait in the lobby.",
-        409,
-        "TEAM_NOT_STARTED",
-      );
-    }
 
     const active = checkpoints[team.currentCheckpointIndex || 0];
 
@@ -263,8 +276,17 @@ async function claimCheckpoint(uid, checkpointId, latitude, longitude) {
 
     const now = new Date();
 
+    // Track checkpoint arrival analytics
+    const checkpointProgress = team.checkpointProgress || {};
+    checkpointProgress[sanitizedCheckpointId] = {
+      claimedAt: now,
+      completedAt: checkpointProgress[sanitizedCheckpointId]?.completedAt || null,
+    };
+
     transaction.update(teamRef, {
       claimedCheckpointId: sanitizedCheckpointId,
+      checkpointProgress,
+      status: "active",
       updatedAt: now,
     });
 
@@ -298,6 +320,17 @@ async function submitChallenge(uid, checkpointId, answer) {
   const { player, teamRef } = await resolvePlayerTeam(uid);
 
   return db.runTransaction(async (transaction) => {
+    // 1. Authoritative global event state check inside the transaction
+    const { eventData } = await getOrCreateEventDoc(transaction);
+
+    if (eventData.status !== "active") {
+      throw new GameError(
+        `Challenge submissions are disabled because the competition is currently '${eventData.status}'.`,
+        403,
+        "EVENT_NOT_ACTIVE",
+      );
+    }
+
     const teamSnap = await transaction.get(teamRef);
 
     if (!teamSnap.exists) {
@@ -305,14 +338,6 @@ async function submitChallenge(uid, checkpointId, answer) {
     }
 
     const team = teamSnap.data();
-
-    if (team.status === "waiting") {
-      throw new GameError(
-        "The adventure has not started yet.",
-        409,
-        "TEAM_NOT_STARTED",
-      );
-    }
 
     const completedList = team.completedCheckpoints || [];
 
@@ -365,12 +390,20 @@ async function submitChallenge(uid, checkpointId, answer) {
 
     const isAdventureCompleted = nextIndex >= checkpoints.length;
 
+    // Track checkpoint arrival analytics
+    const checkpointProgress = team.checkpointProgress || {};
+    checkpointProgress[sanitizedCheckpointId] = {
+      claimedAt: checkpointProgress[sanitizedCheckpointId]?.claimedAt || now,
+      completedAt: now,
+    };
+
     transaction.update(teamRef, {
       score,
       completedCheckpoints: updatedCompletedCheckpoints,
       currentCheckpointIndex: nextIndex,
       claimedCheckpointId: null,
       inventory,
+      checkpointProgress,
       lastScoreUpdatedAt: now,
       updatedAt: now,
       ...(isAdventureCompleted
@@ -430,12 +463,30 @@ async function submitChallenge(uid, checkpointId, answer) {
   });
 }
 
+function formatTime(timestamp) {
+  if (!timestamp) return null;
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  if (isNaN(date.getTime())) return null;
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 /**
- * Team-based Leaderboard with deterministic ranking rules:
- * 1. Highest total XP
- * 2. Most completed checkpoints
- * 3. Earliest timestamp at which tied score/progress was achieved
- * 4. Stable team ID ordering
+ * Player-Facing Race Leaderboard
+ *
+ * Ranking rules:
+ * 1. Completed teams rank above unfinished teams.
+ * 2. Completed teams rank by earliest official completion timestamp (completedAt).
+ * 3. Unfinished teams rank by number of completed checkpoints.
+ * 4. If tied, the team that completed its most recent checkpoint earlier ranks higher.
+ * 5. If still tied, use XP.
+ * 6. Finally, use stable team ID as a deterministic tie-breaker.
+ *
+ * Does NOT reveal undiscovered checkpoint names or coordinates!
  */
 async function getLeaderboard(currentUid = null) {
   let currentTeamId = null;
@@ -451,63 +502,100 @@ async function getLeaderboard(currentUid = null) {
     }
   }
 
-  // Fetch all teams
+  // Fetch all participating teams
   const snapshot = await teams.limit(100).get();
 
   let teamList = snapshot.docs.map((doc) => {
     const data = doc.data();
+    const completedCount = (data.completedCheckpoints || []).length;
+    const isCompleted = completedCount >= checkpoints.length || Boolean(data.completedAt);
+
+    const completedAtMillis = data.completedAt?.toMillis
+      ? data.completedAt.toMillis()
+      : data.completedAt
+        ? new Date(data.completedAt).getTime()
+        : null;
+
+    const lastScoreMillis = data.lastScoreUpdatedAt?.toMillis
+      ? data.lastScoreUpdatedAt.toMillis()
+      : data.createdAt?.toMillis
+        ? data.createdAt.toMillis()
+        : 0;
+
     return {
       teamId: doc.id,
       name: sanitizeString(data.name || "Explorer Team", 30),
       displayName: sanitizeString(data.name || "Explorer Team", 30), // backward compatibility for tests
       score: data.score || 0,
-      completedCount: (data.completedCheckpoints || []).length,
+      completedCount,
       totalCheckpoints: checkpoints.length,
+      progress: `${completedCount}/${checkpoints.length}`,
       memberCount: data.memberCount || 1,
-      lastScoreUpdatedAt:
-        data.lastScoreUpdatedAt?.toMillis?.() ||
-        data.createdAt?.toMillis?.() ||
-        0,
+      isCompleted,
+      completedAtMillis,
+      finishedAt: isCompleted ? formatTime(data.completedAt || data.lastScoreUpdatedAt) : "—",
+      lastScoreUpdatedAtMillis: lastScoreMillis,
       isCurrentTeam: currentTeamId ? doc.id === currentTeamId : false,
       isCurrentUser: currentTeamId ? doc.id === currentTeamId : false,
     };
   });
 
-  // If no teams exist yet, check players collection as backward compatibility fallback
+  // Backward compatibility fallback if no teams exist
   if (teamList.length === 0) {
     const playerSnapshot = await players.limit(50).get();
     teamList = playerSnapshot.docs.map((doc) => {
       const data = doc.data();
+      const completedCount = (data.completedCheckpoints || []).length;
       return {
         teamId: doc.id,
         name: sanitizeString(data.displayName || "Explorer", 30),
         displayName: sanitizeString(data.displayName || "Explorer", 30),
         score: data.score || 0,
-        completedCount: (data.completedCheckpoints || []).length,
+        completedCount,
         totalCheckpoints: checkpoints.length,
+        progress: `${completedCount}/${checkpoints.length}`,
         memberCount: 1,
-        lastScoreUpdatedAt: data.updatedAt?.toMillis?.() || 0,
+        isCompleted: completedCount >= checkpoints.length,
+        completedAtMillis: null,
+        finishedAt: "—",
+        lastScoreUpdatedAtMillis: data.updatedAt?.toMillis?.() || 0,
         isCurrentTeam: currentUid ? doc.id === currentUid : false,
         isCurrentUser: currentUid ? doc.id === currentUid : false,
       };
     });
   }
 
-  // Sort deterministically
+  // Sort according to Race Leaderboard rules
   teamList.sort((a, b) => {
-    // 1. Highest XP
+    // 1. Completed teams rank above unfinished teams
+    if (a.isCompleted && !b.isCompleted) return -1;
+    if (!a.isCompleted && b.isCompleted) return 1;
+
+    // 2. Completed teams rank by earliest official completion timestamp
+    if (a.isCompleted && b.isCompleted) {
+      const aTime = a.completedAtMillis || 0;
+      const bTime = b.completedAtMillis || 0;
+      if (aTime !== bTime) {
+        return aTime - bTime; // earliest first
+      }
+    }
+
+    // 3. Unfinished teams rank by number of completed checkpoints
+    if (b.completedCount !== a.completedCount) {
+      return b.completedCount - a.completedCount; // higher count first
+    }
+
+    // 4. If tied, team that completed most recent checkpoint earlier ranks higher
+    if (a.lastScoreUpdatedAtMillis !== b.lastScoreUpdatedAtMillis) {
+      return a.lastScoreUpdatedAtMillis - b.lastScoreUpdatedAtMillis; // earlier timestamp first
+    }
+
+    // 5. If still tied, use XP
     if (b.score !== a.score) {
       return b.score - a.score;
     }
-    // 2. Most completed checkpoints
-    if (b.completedCount !== a.completedCount) {
-      return b.completedCount - a.completedCount;
-    }
-    // 3. Earliest timestamp of achieving score
-    if (a.lastScoreUpdatedAt !== b.lastScoreUpdatedAt) {
-      return a.lastScoreUpdatedAt - b.lastScoreUpdatedAt;
-    }
-    // 4. Stable team ID ordering
+
+    // 6. Stable team ID tie-breaker
     return a.teamId.localeCompare(b.teamId);
   });
 
@@ -547,8 +635,10 @@ async function adminResetPlayerProgress(targetTeamId) {
     currentCheckpointIndex: 0,
     claimedCheckpointId: null,
     completedCheckpoints: [],
+    checkpointProgress: {},
     inventory: [],
     status: "waiting",
+    completedAt: null,
     lastScoreUpdatedAt: new Date(),
     updatedAt: new Date(),
   });

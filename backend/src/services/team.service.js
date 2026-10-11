@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { db } = require("../config/firebase");
 const checkpoints = require("../data/checkpoints");
 const { sanitizeString } = require("../middleware/security");
+const { getOrCreateEventDoc } = require("./event.service");
 
 const teamsCollection = db.collection("teams");
 const playersCollection = db.collection("players");
@@ -47,6 +48,16 @@ async function createTeam(user, { teamName, leaderName }) {
       "Team name must be between 2 and 30 characters.",
       400,
       "INVALID_TEAM_NAME",
+    );
+  }
+
+  // Ensure event is in waiting state before allowing team registration
+  const { eventData } = await getOrCreateEventDoc();
+  if (eventData.status !== "waiting") {
+    throw new TeamError(
+      `Team registration is closed because the event is currently '${eventData.status}'.`,
+      403,
+      "REGISTRATION_CLOSED",
     );
   }
 
@@ -232,6 +243,16 @@ async function joinTeam(user, { joinCode, displayName }) {
     throw new TeamError("A valid 6-character team code is required.", 400, "INVALID_CODE");
   }
 
+  // Ensure event is in waiting state before allowing new members to join
+  const { eventData } = await getOrCreateEventDoc();
+  if (eventData.status !== "waiting") {
+    throw new TeamError(
+      `Team joining is closed because the event is currently '${eventData.status}'.`,
+      403,
+      "JOINING_CLOSED",
+    );
+  }
+
   const rawName =
     displayName ||
     user.name ||
@@ -403,6 +424,7 @@ async function getMyTeam(uid) {
 
   const isLeader = team.leaderUid === uid;
   const currentCheckpointIndex = team.currentCheckpointIndex || 0;
+  const { eventData: currentEvent } = await getOrCreateEventDoc();
 
   return {
     hasTeam: true,
@@ -410,7 +432,9 @@ async function getMyTeam(uid) {
     name: team.name,
     joinCode: team.joinCode,
     leaderUid: team.leaderUid,
-    status: team.status, // waiting | active | completed
+    status: currentEvent.status === "active" ? "active" : team.status,
+    eventStatus: currentEvent.status,
+    eventStartedAt: currentEvent.startedAt?.toDate ? currentEvent.startedAt.toDate().toISOString() : currentEvent.startedAt,
     memberCount: members.length,
     maxMembers: team.maxMembers || 4,
     role: isLeader ? "leader" : playerData.role || "member",
@@ -428,69 +452,15 @@ async function getMyTeam(uid) {
 }
 
 /**
- * Starts the adventure for the team. Leader only.
+ * Starts the adventure for the team.
+ * Architecturally disabled: Administrator controls event start exclusively.
  */
-async function startAdventure(user) {
-  const uid = user.uid;
-  validateUid(uid);
-
-  const playerDoc = await playersCollection.doc(uid).get();
-  if (!playerDoc.exists || !playerDoc.data().teamId) {
-    throw new TeamError("Team not found.", 404, "TEAM_NOT_FOUND");
-  }
-
-  const teamId = playerDoc.data().teamId;
-  const teamRef = teamsCollection.doc(teamId);
-
-  return db.runTransaction(async (transaction) => {
-    const teamSnap = await transaction.get(teamRef);
-    if (!teamSnap.exists) {
-      throw new TeamError("Team not found.", 404, "TEAM_NOT_FOUND");
-    }
-
-    const team = teamSnap.data();
-
-    if (team.leaderUid !== uid) {
-      throw new TeamError(
-        "Only the team leader can start the adventure.",
-        403,
-        "NOT_LEADER",
-      );
-    }
-
-    if (team.status === "active") {
-      // Idempotent
-      return { success: true, status: "active", message: "Adventure already started." };
-    }
-
-    if (team.status !== "waiting") {
-      throw new TeamError(
-        "Cannot start adventure from current state.",
-        400,
-        "INVALID_STATUS",
-      );
-    }
-
-    const now = new Date();
-
-    transaction.update(teamRef, {
-      status: "active",
-      startedAt: now,
-      updatedAt: now,
-    });
-
-    const eventRef = teamRef.collection("events").doc();
-    transaction.set(eventRef, {
-      id: eventRef.id,
-      type: "game_started",
-      actorUid: uid,
-      actorName: team.leaderName || "Leader",
-      message: "The adventure has begun!",
-      createdAt: now,
-    });
-
-    return { success: true, status: "active" };
-  });
+async function startAdventure() {
+  throw new TeamError(
+    "Team leaders cannot start the event. The competition is started exclusively by administrators.",
+    403,
+    "ADMIN_CONTROLLED",
+  );
 }
 
 /**

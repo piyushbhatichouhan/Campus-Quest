@@ -1,6 +1,5 @@
 const express = require("express");
 const { requireAuth, optionalAuth } = require("../middleware/requireAuth");
-const { requireAdmin } = require("../middleware/requireAdmin");
 const { actionLimiter, challengeLimiter } = require("../middleware/security");
 
 const {
@@ -10,11 +9,11 @@ const {
   claimCheckpoint,
   submitChallenge,
   getLeaderboard,
-  adminGetPlayersList,
-  adminResetPlayerProgress,
 } = require("../services/game.service");
 
 const teamRoutes = require("./team.routes");
+const adminRoutes = require("./admin.routes");
+const { getPublicEventStatus } = require("../services/event.service");
 
 const router = express.Router();
 
@@ -25,6 +24,18 @@ function asyncHandler(handler) {
 
 // Team management routes (/api/teams/...)
 router.use("/teams", teamRoutes);
+
+// Admin management routes (/api/admin/...)
+router.use("/admin", adminRoutes);
+
+// Public Event Status endpoint (/api/event/status)
+router.get(
+  "/event/status",
+  asyncHandler(async (req, res) => {
+    const data = await getPublicEventStatus();
+    res.json({ success: true, data });
+  }),
+);
 
 // Public checkpoint definitions, without correct answers.
 router.get(
@@ -89,37 +100,13 @@ router.post(
   }),
 );
 
-// Optional Auth: Get public leaderboard
+// Optional Auth: Get public race leaderboard
 router.get(
   "/leaderboard",
   optionalAuth,
   actionLimiter,
   asyncHandler(async (req, res) => {
     const data = await getLeaderboard(req.user?.uid);
-    res.json({ success: true, data });
-  }),
-);
-
-// =========================================================================
-// ADMIN ROUTES (Protected by requireAuth and requireAdmin)
-// =========================================================================
-
-router.get(
-  "/admin/players",
-  requireAuth,
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const data = await adminGetPlayersList();
-    res.json({ success: true, data });
-  }),
-);
-
-router.post(
-  "/admin/players/:uid/reset",
-  requireAuth,
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const data = await adminResetPlayerProgress(req.params.uid);
     res.json({ success: true, data });
   }),
 );

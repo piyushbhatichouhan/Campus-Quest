@@ -23,6 +23,6 @@
     "test:firebase": "node src/config/firebase.test.js",
     "test:security": "node --test src/tests/security.test.js",
     "test:integration": "node --test src/tests/gameIntegration.test.js",
-    "test": "node --test src/tests/*.test.js"
+    "test": "node --test --test-concurrency=1 src/tests/*.test.js"
   }
 }
