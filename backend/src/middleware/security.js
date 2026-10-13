@@ -1,67 +1,91 @@
 const rateLimit = require("express-rate-limit");
 
-// Global rate limiter for all API routes (100 requests per 15 minutes per IP)
+// ============================================================
+// GLOBAL RATE LIMITER
+// 2000 requests per 15 minutes per IP
+// ============================================================
+
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 2000,
+
   standardHeaders: true,
   legacyHeaders: false,
+
+  // Never rate-limit Render health checks
+  skip: (req) => {
+    return req.path === "/health" || req.path === "/api/health";
+  },
+
   message: {
     success: false,
     error: {
       code: "TOO_MANY_REQUESTS",
-      message: "Too many requests from this IP. Please try again after 15 minutes.",
+      message: "Too many requests. Please try again shortly.",
     },
   },
 });
 
-// Action limiter for state-changing endpoints (30 requests per 15 minutes)
+// ============================================================
+// ACTION RATE LIMITER
+// 150 state-changing requests per 15 minutes per IP
+// ============================================================
+
 const actionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 150,
+
   standardHeaders: true,
   legacyHeaders: false,
+
   message: {
     success: false,
     error: {
       code: "TOO_MANY_REQUESTS",
-      message: "Rate limit exceeded for game actions. Please slow down.",
+      message: "Too many game actions. Please slow down.",
     },
   },
 });
 
-// Strict challenge submission limiter (10 attempts per minute per IP to prevent brute forcing)
+// ============================================================
+// CHALLENGE RATE LIMITER
+// 20 attempts per minute per IP
+// ============================================================
+
 const challengeLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 10,
+  windowMs: 60 * 1000,
+  max: 20,
+
   standardHeaders: true,
   legacyHeaders: false,
+
   message: {
     success: false,
     error: {
       code: "TOO_MANY_ATTEMPTS",
-      message: "Too many challenge attempts in a short time. Please wait a minute before trying again.",
+      message: "Too many challenge attempts. Please wait a minute.",
     },
   },
 });
 
-/**
- * Sanitizes user input string by trimming, enforcing maximum length,
- * and stripping HTML tags / control characters.
- */
+// ============================================================
+// INPUT SANITIZATION
+// ============================================================
+
 function sanitizeString(input, maxLength = 100) {
   if (typeof input !== "string") return "";
 
   return input
     .trim()
     .slice(0, maxLength)
-    .replace(/[<>&"']/g, "") // Strip HTML special characters
-    .replace(/[\x00-\x1F\x7F]/g, ""); // Strip control characters
+    .replace(/[<>&"']/g, "")
+    .replace(/[\x00-\x1F\x7F]/g, "");
 }
 
-/**
- * Validates latitude and longitude coordinate inputs.
- */
+// ============================================================
+// COORDINATE VALIDATION
+// ============================================================
+
 function isValidCoordinate(lat, lon) {
   return (
     typeof lat === "number" &&
